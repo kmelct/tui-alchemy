@@ -1,8 +1,8 @@
 use crate::app::App;
 use crate::effects::{EffectKind, ElementStyle};
 use crate::layout::{
-    HEADER_HEIGHT, IsoCell, atlas_panel, atlas_visible_count, board_inner, catalog_strip_rects,
-    grimoire_layout, iso_board_cells, rail_sections, scene_layout, stage_rect,
+    IsoCell, atlas_panel, atlas_visible_count, board_inner, catalog_strip_rects, grimoire_layout,
+    iso_board_cells, rail_sections, scene_layout, stage_rect,
 };
 use crate::palette::{palette_color, palette_color_for_seed};
 use crate::sprites::{sprite_lines_for_element_frame, sprite_lines_for_path_with_size};
@@ -374,98 +374,118 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let catalog = app.active_catalog();
     let discovered = app.active_discovered_count();
     let active_banner = app.active_banner_text();
-
-    fill_rect_bg(
-        frame,
-        Rect::new(area.x, area.y, area.width, HEADER_HEIGHT.min(area.height)),
-        HUD_BG,
-    );
-
-    let title_line = center_line(
-        Line::from(vec![
-            Span::styled("▛▀▜ ", Style::default().fg(palette_color(5)).bg(HUD_BG)),
-            Span::styled(
-                "little alchemy",
-                Style::default()
-                    .fg(palette_color(10))
-                    .bg(HUD_BG)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
-            Span::styled("◆ ", Style::default().fg(palette_color(9)).bg(HUD_BG)),
-            Span::styled(
-                format!("{discovered} / {}", app.active_total()),
-                Style::default()
-                    .fg(palette_color(9))
-                    .bg(HUD_BG)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
-            Span::styled("▣ ", Style::default().fg(palette_color(11)).bg(HUD_BG)),
-            Span::styled(
-                catalog.title(),
-                Style::default()
-                    .fg(palette_color(11))
-                    .bg(HUD_BG)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(" "),
-            Span::styled("▟▄▙", Style::default().fg(palette_color(5)).bg(HUD_BG)),
-        ]),
-        area.width,
-    );
-
-    render_line(frame, Rect::new(area.x, area.y, area.width, 1), title_line);
-
-    let mut status_spans = vec![];
-
-    if let Some(text) = active_banner {
-        status_spans.push(Span::styled(
-            text.to_string(),
-            Style::default()
-                .fg(palette_color(1))
-                .add_modifier(Modifier::BOLD),
-        ));
+    if area.width < 8 || area.height == 0 {
+        return;
     }
 
-    let status_line = if status_spans.is_empty() {
-        center_line(
-            Line::from(vec![
-                Span::styled("▚ ", Style::default().fg(HUD_RIM).bg(HUD_SHADOW)),
-                Span::styled(
-                    format!("{}  crafting table workbench", catalog.title()),
-                    Style::default().fg(palette_color(14)).bg(HUD_SHADOW),
-                ),
-                Span::styled(" ▞", Style::default().fg(HUD_RIM).bg(HUD_SHADOW)),
-            ]),
-            area.width,
-        )
+    let title_style = Style::default().bg(HUD_BG);
+    let title_spans = vec![
+        Span::styled(
+            "little alchemy",
+            title_style
+                .fg(palette_color(10))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("  ", title_style),
+        Span::styled("◆ ", title_style.fg(palette_color(9))),
+        Span::styled(
+            format!("{discovered} / {}", app.active_total()),
+            title_style.fg(palette_color(9)).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("  ", title_style),
+        Span::styled("▣ ", title_style.fg(palette_color(11))),
+        Span::styled(
+            catalog.title(),
+            title_style
+                .fg(palette_color(11))
+                .add_modifier(Modifier::BOLD),
+        ),
+    ];
+
+    let status_style = Style::default().bg(HUD_SHADOW);
+    let status_spans = if let Some(text) = active_banner {
+        vec![
+            Span::styled("✦ ", status_style.fg(palette_color(1))),
+            Span::styled(
+                text.to_string(),
+                status_style
+                    .fg(palette_color(1))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]
     } else {
-        center_line(
-            Line::from({
-                let mut spans = vec![Span::styled(
-                    "✦ ",
-                    Style::default().fg(palette_color(1)).bg(HUD_SHADOW),
-                )];
-                spans.extend(status_spans.into_iter().map(|span| {
-                    Span::styled(
-                        span.content,
-                        span.style.bg(HUD_SHADOW).add_modifier(Modifier::BOLD),
-                    )
-                }));
-                spans
-            }),
-            area.width,
-        )
+        vec![Span::styled(
+            format!("{}  crafting table workbench", catalog.title()),
+            status_style.fg(palette_color(14)),
+        )]
     };
 
+    let desired_inner = span_width(&title_spans)
+        .max(span_width(&status_spans))
+        .saturating_add(4);
+    let plaque_inner = area.width.saturating_sub(2).min(desired_inner.max(8));
+    let plaque_width = plaque_inner.saturating_add(2).min(area.width);
+    let plaque_x = area
+        .x
+        .saturating_add((area.width.saturating_sub(plaque_width)) / 2);
+
+    let top_line = framed_header_top(title_spans, plaque_inner);
+    render_line(
+        frame,
+        Rect::new(plaque_x, area.y, plaque_width, 1),
+        Line::from(top_line),
+    );
+
     if area.height > 1 {
+        let body_line = framed_header_body(status_spans, plaque_inner);
         render_line(
             frame,
-            Rect::new(area.x, area.y + 1, area.width, 1),
-            status_line,
+            Rect::new(plaque_x, area.y + 1, plaque_width, 1),
+            Line::from(body_line),
         );
     }
+}
+
+fn span_width(spans: &[Span<'static>]) -> u16 {
+    spans.iter().map(|span| span.content.chars().count()).sum::<usize>() as u16
+}
+
+fn framed_header_top(spans: Vec<Span<'static>>, inner_width: u16) -> Vec<Span<'static>> {
+    let rim = Style::default().fg(HUD_RIM).bg(HUD_BG);
+    let content_width = span_width(&spans);
+    let rail_total = inner_width.saturating_sub(content_width);
+    let left_rails = rail_total / 2;
+    let right_rails = rail_total.saturating_sub(left_rails);
+    let mut row = Vec::with_capacity(5 + spans.len());
+    row.push(Span::styled("▛", rim));
+    if left_rails > 0 {
+        row.push(Span::styled("▀".repeat(left_rails as usize), rim));
+    }
+    row.extend(spans);
+    if right_rails > 0 {
+        row.push(Span::styled("▀".repeat(right_rails as usize), rim));
+    }
+    row.push(Span::styled("▜", rim));
+    row
+}
+
+fn framed_header_body(spans: Vec<Span<'static>>, inner_width: u16) -> Vec<Span<'static>> {
+    let rim = Style::default().fg(HUD_RIM).bg(HUD_SHADOW);
+    let body = Style::default().bg(HUD_SHADOW);
+    let content_width = span_width(&spans);
+    let left_pad = inner_width.saturating_sub(content_width) / 2;
+    let right_pad = inner_width.saturating_sub(content_width + left_pad);
+    let mut row = Vec::with_capacity(5 + spans.len());
+    row.push(Span::styled("▌", rim));
+    if left_pad > 0 {
+        row.push(Span::styled(" ".repeat(left_pad as usize), body));
+    }
+    row.extend(spans);
+    if right_pad > 0 {
+        row.push(Span::styled(" ".repeat(right_pad as usize), body));
+    }
+    row.push(Span::styled("▐", rim));
+    row
 }
 
 // ===========================================================================

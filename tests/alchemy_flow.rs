@@ -570,12 +570,31 @@ fn header_reads_as_a_sprite_hud_not_plain_status_text() {
     let header = lines.iter().take(2).cloned().collect::<Vec<_>>().join("\n");
 
     assert!(
-        header.contains("▛▀▜") && header.contains("◆") && header.contains("▣"),
-        "top HUD should use sprite-like chips for title and stats, not plain prose:\n{header}"
+        header.contains("▛")
+            && header.contains("▜")
+            && header.contains("◆")
+            && header.contains("▣"),
+        "top HUD should use a framed sprite plaque for title and stats, not plain prose:\n{header}"
     );
     assert!(
         header.contains("little alchemy") && header.contains("4 / 755"),
         "sprite HUD should preserve readable title and combined count stats:\n{header}"
+    );
+}
+
+#[test]
+fn header_status_sits_inside_a_framed_plaque_not_bare_text() {
+    let backend = TestBackend::new(100, 28);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let status_row = &lines[1];
+
+    assert!(
+        status_row.contains("▌") && status_row.contains("▐") && status_row.contains("crafting table workbench"),
+        "the subtitle row should sit inside a framed sprite plaque instead of floating on the backdrop:\n{status_row}"
     );
 }
 
