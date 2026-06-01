@@ -3,8 +3,8 @@ use crate::data::{
 };
 use crate::effects::ElementEffect;
 use crate::layout::{
-    board_inner, catalog_strip_rects, contains, grimoire_layout, iso_board_cells, iso_capacity,
-    iso_columns, iso_hit, rail_sections, scene_layout,
+    atlas_panel, board_inner, catalog_strip_rects, contains, grimoire_layout, iso_board_cells,
+    iso_capacity, iso_columns, iso_hit, rail_sections, scene_layout,
 };
 use crate::ui;
 use crossterm::event::{Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
@@ -431,10 +431,11 @@ impl App {
         }
 
         let scene = scene_layout(self.viewport);
-        if contains(scene.board, column, row) {
+        let inventory = atlas_panel(scene.board, self.active_palette().len());
+        if contains(inventory, column, row) {
             return Some(Pane::Inventory);
         }
-        if contains(scene.grimoire, column, row) {
+        if contains(grimoire_layout(scene.grimoire).panel, column, row) {
             return Some(Pane::Canvas);
         }
         None
@@ -446,12 +447,13 @@ impl App {
         }
 
         let scene = scene_layout(self.viewport);
+        let inventory = atlas_panel(scene.board, self.active_palette().len());
 
-        if contains(scene.board, column, row) {
+        if contains(inventory, column, row) {
             return self.hit_inventory(column, row);
         }
 
-        if contains(scene.grimoire, column, row) {
+        if contains(grimoire_layout(scene.grimoire).panel, column, row) {
             return self.hit_canvas(column, row);
         }
 
@@ -460,7 +462,7 @@ impl App {
 
     fn hit_inventory(&self, column: u16, row: u16) -> Option<HitTarget> {
         let scene = scene_layout(self.viewport);
-        let inner = board_inner(scene.board);
+        let inner = board_inner(atlas_panel(scene.board, self.active_palette().len()));
 
         if !contains(inner, column, row) {
             return None;
@@ -521,17 +523,20 @@ impl App {
 
     pub(crate) fn visible_canvas_count(&self) -> usize {
         let scene = scene_layout(self.viewport);
-        iso_capacity(board_inner(scene.board))
+        let panel = atlas_panel(scene.board, self.active_palette().len());
+        iso_capacity(board_inner(panel))
     }
 
     fn inventory_columns(&self) -> usize {
         let scene = scene_layout(self.viewport);
-        iso_columns(board_inner(scene.board))
+        let panel = atlas_panel(scene.board, self.active_palette().len());
+        iso_columns(board_inner(panel))
     }
 
     fn inventory_visible_capacity(&self) -> usize {
         let scene = scene_layout(self.viewport);
-        iso_capacity(board_inner(scene.board))
+        let panel = atlas_panel(scene.board, self.active_palette().len());
+        iso_capacity(board_inner(panel))
     }
 
     fn switch_catalog(&mut self, delta: isize) {
@@ -904,7 +909,8 @@ mod tests {
     /// Centre of the board cell currently rendering `element_index`.
     fn board_cell_center(app: &App, element_index: usize) -> (u16, u16) {
         let scene = scene_layout(app.viewport);
-        let inner = board_inner(scene.board);
+        let panel = atlas_panel(scene.board, app.active_palette().len());
+        let inner = board_inner(panel);
         let palette = app.active_palette();
         let cells = iso_board_cells(inner, palette.len(), app.active_state().palette_scroll);
         let cell = cells

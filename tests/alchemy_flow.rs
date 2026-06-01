@@ -580,6 +580,25 @@ fn header_reads_as_a_sprite_hud_not_plain_status_text() {
 }
 
 #[test]
+fn header_logo_reads_like_a_centered_banner_on_wide_terminals() {
+    let backend = TestBackend::new(100, 28);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let title_row = &lines[0];
+    let left = first_non_space_column(title_row).expect("header title should render");
+    let right = last_non_space_column(title_row).expect("header title should render");
+    let right_pad = title_row.chars().count().saturating_sub(right + 1);
+
+    assert!(
+        left >= 4 && right_pad >= 4 && left.abs_diff(right_pad) <= 3,
+        "wide terminals should center the fantasy title banner instead of pinning it to the left:\n{title_row}"
+    );
+}
+
+#[test]
 fn progress_is_a_compact_chip_not_a_tall_empty_panel() {
     let backend = TestBackend::new(100, 28);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -651,6 +670,55 @@ fn narrow_layout_keeps_recipe_book_and_table_close_to_the_atlas() {
         recipe_row.saturating_sub(atlas_labels) <= 8,
         "narrow terminals should not leave a large dead band between the atlas and recipe table:\n{}",
         lines.join("\n")
+    );
+}
+
+#[test]
+fn tall_layout_balances_the_scene_in_the_middle_of_the_chamber() {
+    let backend = TestBackend::new(100, 48);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+    app.reveal_elements_for_preview(&["Steam", "Mud", "Lava", "Rain", "Sea", "Cloud"]);
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let anchors = [
+        "progress",
+        "atlas",
+        "recipe table",
+        "steam",
+        "sea",
+        "book",
+        "result",
+    ];
+    let rows = anchors
+        .iter()
+        .filter_map(|needle| find_text_position(&lines, needle).map(|(_, row)| row as usize))
+        .collect::<Vec<_>>();
+    let top = *rows.iter().min().expect("expected visible scene anchors");
+    let bottom = *rows.iter().max().expect("expected visible scene anchors");
+    let top_pad = top;
+    let bottom_pad = lines.len().saturating_sub(bottom + 1);
+
+    assert!(
+        top_pad.abs_diff(bottom_pad) <= 10,
+        "tall layouts should center the active scene vertically instead of leaving a giant dead floor:\n{}",
+        lines.join("\n")
+    );
+}
+
+#[test]
+fn atlas_uses_the_same_framed_title_bar_as_the_other_fantasy_panels() {
+    let backend = TestBackend::new(100, 28);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let text = buffer_to_text(terminal.backend().buffer());
+
+    assert!(
+        text.contains("✦ atlas"),
+        "the atlas should be framed as a titled fantasy panel instead of a loose label:\n{text}"
     );
 }
 
@@ -1253,8 +1321,8 @@ fn starter_sprites_stay_compact_inside_tiles() {
         let position = find_text_position(&lines, label).expect("expected starter tile");
         let rows = graphic_row_count_above_label(&lines, position, 7, 6);
         assert!(
-            rows <= 5,
-            "{label} icon should stay compact like a pixel-atlas sprite, not fill the whole tile; rows={rows}\n{}",
+            rows <= 6,
+            "{label} icon should stay compact even with the new atlas frame, not spill into a tall card; rows={rows}\n{}",
             lines.join("\n")
         );
     }
@@ -2304,6 +2372,17 @@ fn buffer_lines(buffer: &ratatui::buffer::Buffer) -> Vec<String> {
         lines.push(line);
     }
     lines
+}
+
+fn first_non_space_column(line: &str) -> Option<usize> {
+    line.chars().position(|ch| ch != ' ')
+}
+
+fn last_non_space_column(line: &str) -> Option<usize> {
+    line.chars()
+        .enumerate()
+        .filter_map(|(index, ch)| (ch != ' ').then_some(index))
+        .last()
 }
 
 fn find_text_position(lines: &[String], needle: &str) -> Option<(u16, u16)> {

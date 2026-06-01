@@ -73,13 +73,13 @@ pub(crate) fn scene_layout(area: Rect) -> SceneLayout {
     if main.width < NARROW_BREAKPOINT {
         // Vertical stack for narrow terminals: keep the recipe table close to
         // the atlas instead of letting a mostly empty board consume all spare
-        // height. Extra space falls through to the chamber backdrop below.
+        // height. The board itself remains compact inside its allocated band.
         let rail_h = 4.min(main.height.saturating_sub(8)).max(3).min(main.height);
         let after_rail = main.height.saturating_sub(rail_h);
         let grimoire_h = 12.min(after_rail.saturating_sub(6)).max(8).min(after_rail);
         let after_grimoire = after_rail.saturating_sub(grimoire_h);
         let board_h = if after_grimoire >= 6 {
-            after_grimoire.min(14)
+            after_grimoire.min(16)
         } else {
             after_grimoire
         };
@@ -127,6 +127,38 @@ pub(crate) fn scene_layout(area: Rect) -> SceneLayout {
     }
 }
 
+fn centered_offset(available: u16, content: u16) -> u16 {
+    available.saturating_sub(content) / 2
+}
+
+pub(crate) fn atlas_panel(area: Rect, count: usize) -> Rect {
+    if area.width == 0 || area.height == 0 {
+        return area;
+    }
+
+    let available = board_inner(area);
+    if available.width == 0 || available.height == 0 {
+        return area;
+    }
+
+    let max_columns = iso_columns(available).max(1);
+    let visible = count.max(1);
+    let columns = visible.min(max_columns);
+    let max_rows = iso_rows(available).max(1);
+    let rows = visible.div_ceil(columns).min(max_rows);
+    let content_w = ISO_STAGGER
+        .saturating_add((columns as u16).saturating_mul(ISO_COL_STRIDE))
+        .saturating_sub(ISO_GAP_X);
+    let content_h = (rows as u16).saturating_mul(ISO_ROW_STRIDE);
+    let panel_w = content_w.saturating_add(2).clamp(14, area.width);
+    let panel_h = content_h.saturating_add(2).clamp(10, area.height);
+    let x = area
+        .x
+        .saturating_add((area.width.saturating_sub(panel_w)) / 2);
+    let y = area.y.saturating_add(centered_offset(area.height, panel_h));
+    Rect::new(x, y, panel_w, panel_h)
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RailSections {
     pub panel: Rect,
@@ -137,11 +169,15 @@ pub(crate) struct RailSections {
 }
 
 pub(crate) fn rail_sections(rail: Rect) -> RailSections {
-    // Compact HUD panel docked at the top of its column; the board is the
-    // dominant canvas, so the rail is sized to its content and the chamber
-    // backdrop fills the column below it.
+    // Compact HUD panel kept cohesive even on tall screens; extra height turns
+    // into chamber backdrop around it instead of dead panel body.
     let panel_h = rail.height.clamp(8, 13).min(rail.height.max(1));
-    let panel = Rect::new(rail.x, rail.y, rail.width, panel_h);
+    let panel = Rect::new(
+        rail.x,
+        rail.y.saturating_add(centered_offset(rail.height, panel_h)),
+        rail.width,
+        panel_h,
+    );
     let inner = inset(panel, 1);
     let line = |offset: u16| Rect::new(inner.x, inner.y.saturating_add(offset), inner.width, 1);
     // Catalog switch shelf fills the lower portion of the compact panel.
@@ -298,10 +334,15 @@ pub(crate) struct GrimoireLayout {
 }
 
 pub(crate) fn grimoire_layout(area: Rect) -> GrimoireLayout {
-    // Compact recipe panel docked at the top-right; the board is the dominant
-    // canvas and the chamber backdrop fills the column below it.
+    // Compact recipe panel: keep the device readable and vertically balanced in
+    // tall viewports instead of stretching it into a ribbon pinned to the top.
     let panel_h = area.height.clamp(9, 14).min(area.height.max(1));
-    let panel = Rect::new(area.x, area.y, area.width, panel_h);
+    let panel = Rect::new(
+        area.x,
+        area.y.saturating_add(centered_offset(area.height, panel_h)),
+        area.width,
+        panel_h,
+    );
     let inner = inset(panel, 1);
     let nameplate = Rect::new(inner.x, inner.y, inner.width, 1);
     let body = Rect::new(

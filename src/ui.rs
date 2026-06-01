@@ -1,8 +1,8 @@
 use crate::app::App;
 use crate::effects::{EffectKind, ElementStyle};
 use crate::layout::{
-    HEADER_HEIGHT, IsoCell, board_inner, catalog_strip_rects, grimoire_layout, iso_board_cells,
-    rail_sections, scene_layout, stage_rect,
+    HEADER_HEIGHT, IsoCell, atlas_panel, board_inner, catalog_strip_rects, grimoire_layout,
+    iso_board_cells, rail_sections, scene_layout, stage_rect,
 };
 use crate::palette::{palette_color, palette_color_for_seed};
 use crate::sprites::{sprite_lines_for_element_frame, sprite_lines_for_path_with_size};
@@ -42,8 +42,10 @@ pub fn render_app(frame: &mut Frame<'_>, app: &App) {
 
     if let Some(drag) = app.active_drag() {
         let drag_area = match drag.origin {
-            crate::app::DragOrigin::Inventory => scene.board,
-            crate::app::DragOrigin::Canvas => scene.grimoire,
+            crate::app::DragOrigin::Inventory => {
+                atlas_panel(scene.board, app.active_palette().len())
+            }
+            crate::app::DragOrigin::Canvas => grimoire_layout(scene.grimoire).panel,
         };
         render_drag_overlay(
             frame,
@@ -229,42 +231,41 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
         HUD_BG,
     );
 
-    let title_spans = vec![
-        Span::styled("▛▀▜ ", Style::default().fg(palette_color(5)).bg(HUD_BG)),
-        Span::styled(
-            "little alchemy",
-            Style::default()
-                .fg(palette_color(10))
-                .bg(HUD_BG)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled("◆ ", Style::default().fg(palette_color(9)).bg(HUD_BG)),
-        Span::styled(
-            format!("{discovered} / {}", app.active_total()),
-            Style::default()
-                .fg(palette_color(9))
-                .bg(HUD_BG)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled("▣ ", Style::default().fg(palette_color(11)).bg(HUD_BG)),
-        Span::styled(
-            catalog.title(),
-            Style::default()
-                .fg(palette_color(11))
-                .bg(HUD_BG)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" "),
-        Span::styled("▟▄▙", Style::default().fg(palette_color(5)).bg(HUD_BG)),
-    ];
-
-    render_line(
-        frame,
-        Rect::new(area.x, area.y, area.width, 1),
-        Line::from(title_spans),
+    let title_line = center_line(
+        Line::from(vec![
+            Span::styled("▛▀▜ ", Style::default().fg(palette_color(5)).bg(HUD_BG)),
+            Span::styled(
+                "little alchemy",
+                Style::default()
+                    .fg(palette_color(10))
+                    .bg(HUD_BG)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled("◆ ", Style::default().fg(palette_color(9)).bg(HUD_BG)),
+            Span::styled(
+                format!("{discovered} / {}", app.active_total()),
+                Style::default()
+                    .fg(palette_color(9))
+                    .bg(HUD_BG)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled("▣ ", Style::default().fg(palette_color(11)).bg(HUD_BG)),
+            Span::styled(
+                catalog.title(),
+                Style::default()
+                    .fg(palette_color(11))
+                    .bg(HUD_BG)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled("▟▄▙", Style::default().fg(palette_color(5)).bg(HUD_BG)),
+        ]),
+        area.width,
     );
+
+    render_line(frame, Rect::new(area.x, area.y, area.width, 1), title_line);
 
     let mut status_spans = vec![];
 
@@ -278,26 +279,34 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
     }
 
     let status_line = if status_spans.is_empty() {
-        Line::from(vec![
-            Span::styled("▚ ", Style::default().fg(HUD_RIM).bg(HUD_SHADOW)),
-            Span::styled(
-                format!("{}  crafting table workbench", catalog.title()),
-                Style::default().fg(palette_color(14)).bg(HUD_SHADOW),
-            ),
-            Span::styled(" ▞", Style::default().fg(HUD_RIM).bg(HUD_SHADOW)),
-        ])
+        center_line(
+            Line::from(vec![
+                Span::styled("▚ ", Style::default().fg(HUD_RIM).bg(HUD_SHADOW)),
+                Span::styled(
+                    format!("{}  crafting table workbench", catalog.title()),
+                    Style::default().fg(palette_color(14)).bg(HUD_SHADOW),
+                ),
+                Span::styled(" ▞", Style::default().fg(HUD_RIM).bg(HUD_SHADOW)),
+            ]),
+            area.width,
+        )
     } else {
-        let mut spans = vec![Span::styled(
-            "✦ ",
-            Style::default().fg(palette_color(1)).bg(HUD_SHADOW),
-        )];
-        spans.extend(status_spans.into_iter().map(|span| {
-            Span::styled(
-                span.content,
-                span.style.bg(HUD_SHADOW).add_modifier(Modifier::BOLD),
-            )
-        }));
-        Line::from(spans)
+        center_line(
+            Line::from({
+                let mut spans = vec![Span::styled(
+                    "✦ ",
+                    Style::default().fg(palette_color(1)).bg(HUD_SHADOW),
+                )];
+                spans.extend(status_spans.into_iter().map(|span| {
+                    Span::styled(
+                        span.content,
+                        span.style.bg(HUD_SHADOW).add_modifier(Modifier::BOLD),
+                    )
+                }));
+                spans
+            }),
+            area.width,
+        )
     };
 
     if area.height > 1 {
@@ -474,23 +483,13 @@ fn render_iso_board(frame: &mut Frame<'_>, area: Rect, app: &App) {
         return;
     }
 
-    // No floor fill — the starfield backdrop shows through. Just a quiet label.
-    render_band(
-        frame,
-        Rect::new(area.x, area.y, area.width.min(12), 1),
-        Line::from(Span::styled(
-            "atlas",
-            Style::default()
-                .fg(palette_color(Ink::FRAME))
-                .add_modifier(Modifier::BOLD),
-        )),
-        Surfaces::VOID,
-    );
-
     let catalog = app.active_catalog();
     let state = app.active_state();
     let palette = app.active_palette();
-    let inner = board_inner(area);
+    let panel = atlas_panel(area, palette.len());
+    render_panel_frame(frame, panel, "atlas", palette_color(Ink::FRAME));
+
+    let inner = board_inner(panel);
     let cells = iso_board_cells(inner, palette.len(), state.palette_scroll);
 
     for cell in &cells {
