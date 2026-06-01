@@ -74,7 +74,10 @@ pub(crate) fn scene_layout(area: Rect) -> SceneLayout {
         // Vertical stack for narrow terminals: keep the recipe table close to
         // the atlas instead of letting a mostly empty board consume all spare
         // height. The board itself remains compact inside its allocated band.
-        let rail_h = 4.min(main.height.saturating_sub(8)).max(3).min(main.height);
+        let rail_h = 10
+            .min(main.height.saturating_sub(16))
+            .max(8)
+            .min(main.height);
         let after_rail = main.height.saturating_sub(rail_h);
         let grimoire_h = 12.min(after_rail.saturating_sub(6)).max(8).min(after_rail);
         let after_grimoire = after_rail.saturating_sub(grimoire_h);
@@ -131,6 +134,12 @@ fn centered_offset(available: u16, content: u16) -> u16 {
     available.saturating_sub(content) / 2
 }
 
+pub(crate) fn atlas_visible_count(area: Rect, total: usize, scroll: usize) -> usize {
+    let available = board_inner(area);
+    let remaining = total.saturating_sub(scroll);
+    remaining.min(iso_capacity(available)).max(1)
+}
+
 pub(crate) fn atlas_panel(area: Rect, count: usize) -> Rect {
     if area.width == 0 || area.height == 0 {
         return area;
@@ -142,9 +151,18 @@ pub(crate) fn atlas_panel(area: Rect, count: usize) -> Rect {
     }
 
     let max_columns = iso_columns(available).max(1);
-    let visible = count.max(1);
-    let columns = visible.min(max_columns);
     let max_rows = iso_rows(available).max(1);
+    let visible = count.max(1);
+    let min_rows = visible.div_ceil(max_columns).min(max_rows).max(1);
+    let columns = (1..=max_columns)
+        .filter(|cols| visible.div_ceil(*cols) == min_rows)
+        .min_by_key(|cols| {
+            (
+                min_rows.saturating_mul(*cols).saturating_sub(visible),
+                *cols,
+            )
+        })
+        .unwrap_or(max_columns);
     let rows = visible.div_ceil(columns).min(max_rows);
     let content_w = ISO_STAGGER
         .saturating_add((columns as u16).saturating_mul(ISO_COL_STRIDE))
@@ -172,10 +190,11 @@ pub(crate) fn rail_sections(rail: Rect) -> RailSections {
     // Compact HUD panel kept cohesive even on tall screens; extra height turns
     // into chamber backdrop around it instead of dead panel body.
     let panel_h = rail.height.clamp(8, 13).min(rail.height.max(1));
+    let panel_w = if rail.width > 28 { 24 } else { rail.width };
     let panel = Rect::new(
-        rail.x,
+        rail.x.saturating_add(centered_offset(rail.width, panel_w)),
         rail.y.saturating_add(centered_offset(rail.height, panel_h)),
-        rail.width,
+        panel_w,
         panel_h,
     );
     let inner = inset(panel, 1);

@@ -1,8 +1,8 @@
 use crate::app::App;
 use crate::effects::{EffectKind, ElementStyle};
 use crate::layout::{
-    HEADER_HEIGHT, IsoCell, atlas_panel, board_inner, catalog_strip_rects, grimoire_layout,
-    iso_board_cells, rail_sections, scene_layout, stage_rect,
+    HEADER_HEIGHT, IsoCell, atlas_panel, atlas_visible_count, board_inner, catalog_strip_rects,
+    grimoire_layout, iso_board_cells, rail_sections, scene_layout, stage_rect,
 };
 use crate::palette::{palette_color, palette_color_for_seed};
 use crate::sprites::{sprite_lines_for_element_frame, sprite_lines_for_path_with_size};
@@ -42,9 +42,14 @@ pub fn render_app(frame: &mut Frame<'_>, app: &App) {
 
     if let Some(drag) = app.active_drag() {
         let drag_area = match drag.origin {
-            crate::app::DragOrigin::Inventory => {
-                atlas_panel(scene.board, app.active_palette().len())
-            }
+            crate::app::DragOrigin::Inventory => atlas_panel(
+                scene.board,
+                atlas_visible_count(
+                    scene.board,
+                    app.active_palette().len(),
+                    app.active_state().palette_scroll,
+                ),
+            ),
             crate::app::DragOrigin::Canvas => grimoire_layout(scene.grimoire).panel,
         };
         render_drag_overlay(
@@ -486,7 +491,8 @@ fn render_iso_board(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let catalog = app.active_catalog();
     let state = app.active_state();
     let palette = app.active_palette();
-    let panel = atlas_panel(area, palette.len());
+    let visible_count = atlas_visible_count(area, palette.len(), state.palette_scroll);
+    let panel = atlas_panel(area, visible_count);
     render_panel_frame(frame, panel, "atlas", palette_color(Ink::FRAME));
 
     let inner = board_inner(panel);

@@ -674,6 +674,44 @@ fn narrow_layout_keeps_recipe_book_and_table_close_to_the_atlas() {
 }
 
 #[test]
+fn narrow_layout_keeps_the_recipe_book_tile_visible() {
+    let backend = TestBackend::new(64, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+    app.reveal_elements_for_preview(&["Steam", "Mud", "Lava", "Rain"]);
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let text = buffer_to_text(terminal.backend().buffer());
+    assert!(
+        text.contains("recipe book") && text.contains("combined") && text.contains("▄▗▖"),
+        "narrow layouts should preserve the single recipe-book control instead of collapsing it away:\n{text}"
+    );
+}
+
+#[test]
+fn narrow_layout_centers_the_recipe_book_panel_instead_of_stretching_it_wall_to_wall() {
+    let backend = TestBackend::new(64, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+    app.reveal_elements_for_preview(&["Steam", "Mud", "Lava", "Rain"]);
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let progress_row = lines
+        .iter()
+        .find(|line| line.contains("progress"))
+        .expect("expected progress panel row");
+    let left = first_non_space_column(progress_row).expect("expected visible panel");
+    let right = last_non_space_column(progress_row).expect("expected visible panel");
+    let right_pad = progress_row.chars().count().saturating_sub(right + 1);
+
+    assert!(
+        left >= 6 && right_pad >= 6,
+        "narrow layouts should keep the recipe-book panel compact and centered instead of stretching it full width:\n{}",
+        lines.join("\n")
+    );
+}
+#[test]
 fn tall_layout_balances_the_scene_in_the_middle_of_the_chamber() {
     let backend = TestBackend::new(100, 48);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -1274,6 +1312,34 @@ fn starting_elements_render_as_a_compact_atlas_row() {
         air.1,
         water.1,
         "the four starting elements should read as a compact atlas row, not oversized cards:\n{}",
+        lines.join("\n")
+    );
+}
+
+#[test]
+fn short_layout_uses_the_atlas_capacity_before_showing_a_large_empty_body() {
+    let backend = TestBackend::new(100, 24);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+    app.reveal_elements_for_preview(&["Steam", "Mud", "Lava", "Rain", "Sea", "Cloud"]);
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let mut row_counts = Vec::<(u16, usize)>::new();
+    for row in ["lava", "mud", "rain", "sea", "steam", "cloud"]
+        .into_iter()
+        .filter_map(|label| find_text_position(&lines, label).map(|(_, row)| row))
+    {
+        if let Some((_, count)) = row_counts.iter_mut().find(|(existing, _)| *existing == row) {
+            *count += 1;
+        } else {
+            row_counts.push((row, 1));
+        }
+    }
+
+    assert!(
+        row_counts.len() == 2 && row_counts.iter().all(|(_, count)| *count >= 3),
+        "short layouts should pack the atlas into dense rows instead of leaving an underfilled tail row:\n{}",
         lines.join("\n")
     );
 }
