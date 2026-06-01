@@ -647,6 +647,99 @@ fn backdrop_uses_layered_pixel_scene_not_a_flat_fill() {
 }
 
 #[test]
+fn backdrop_has_center_stage_glow_not_a_uniform_wall() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let sample_row = buffer.area.height.saturating_mul(4) / 5;
+    let side = average_background_brightness(buffer, 8, sample_row, 30, 1);
+    let center = average_background_brightness(buffer, 70, sample_row, 20, 1);
+
+    assert!(
+        center > side + 4,
+        "background should have an intentional central stage glow instead of a uniform star wall; side={side}, center={center}"
+    );
+}
+
+#[test]
+fn backdrop_specks_are_sparse_enough_to_read_as_atmosphere() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let mut specks = 0usize;
+    let mut open_background = 0usize;
+    for row in 0..buffer.area.height {
+        for column in 0..buffer.area.width {
+            let cell = &buffer[(column, row)];
+            if cell.symbol() != " " {
+                continue;
+            }
+            open_background += 1;
+            if matches!(
+                cell.bg,
+                ratatui::style::Color::Rgb(28, 31, 46) | ratatui::style::Color::Rgb(56, 62, 88)
+            ) {
+                specks += 1;
+            }
+        }
+    }
+
+    assert!(
+        specks * 100 <= open_background * 4,
+        "background motes should be sparse polish, not visual noise; specks={specks}, open_background={open_background}"
+    );
+}
+
+
+#[test]
+fn wide_layout_wraps_panels_in_one_workshop_shell() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let text = buffer_to_text(terminal.backend().buffer());
+
+    assert!(
+        text.contains("✦ workshop"),
+        "wide layouts should read as one responsive application shell with internal panels, not floating cards:\n{text}"
+    );
+}
+
+#[test]
+fn same_app_redraws_cleanly_across_dynamic_resize_steps() {
+    let mut app = App::new();
+    app.reveal_elements_for_preview(&[
+        "Dust", "Energy", "Lava", "Mud", "Rain", "Sea", "Steam", "Cloud", "Plant", "Stone",
+        "Metal", "Sand", "Sky", "Storm", "Glass", "Life", "Human", "Tool",
+    ]);
+
+    for (width, height, expect_shell) in [(64, 40, false), (100, 24, true), (160, 50, true)] {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| app.render(frame)).unwrap();
+        let text = buffer_to_text(terminal.backend().buffer());
+
+        assert!(
+            text.contains("recipe book")
+                && text.contains("✦ atlas")
+                && text.contains("✦ recipe table"),
+            "dynamic resize to {width}x{height} should preserve all major panels:\n{text}"
+        );
+        assert_eq!(
+            text.contains("✦ workshop"),
+            expect_shell,
+            "dynamic resize to {width}x{height} should toggle the responsive outer shell at the wide breakpoint:\n{text}"
+        );
+    }
+}
+#[test]
 fn narrow_layout_keeps_recipe_book_and_table_close_to_the_atlas() {
     let backend = TestBackend::new(64, 40);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -1317,6 +1410,24 @@ fn starting_elements_render_as_a_compact_atlas_row() {
 }
 
 #[test]
+fn wide_initial_atlas_scales_starter_sprites_for_large_viewports() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let air = find_text_position(&lines, "air").expect("expected air tile");
+    let rows = graphic_row_count_above_label(&lines, air, 12, 10);
+    let width = graphic_span_width_above_label(&lines, air, 12, 10);
+
+    assert!(
+        rows >= 8 && width >= 12,
+        "large viewports should scale starter sprites up instead of rendering tiny fixed icons; rows={rows}, width={width}\n{}",
+        lines.join("\n")
+    );
+}
+#[test]
 fn short_layout_uses_the_atlas_capacity_before_showing_a_large_empty_body() {
     let backend = TestBackend::new(100, 24);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -1385,10 +1496,10 @@ fn starter_sprites_stay_compact_inside_tiles() {
 
     for label in ["air", "earth", "fire", "water"] {
         let position = find_text_position(&lines, label).expect("expected starter tile");
-        let rows = graphic_row_count_above_label(&lines, position, 7, 6);
+        let rows = graphic_row_count_above_label(&lines, position, 9, 8);
         assert!(
-            rows <= 6,
-            "{label} icon should stay compact even with the new atlas frame, not spill into a tall card; rows={rows}\n{}",
+            rows <= 8,
+            "{label} icon should stay compact even when responsive tiles scale up; rows={rows}\n{}",
             lines.join("\n")
         );
     }
@@ -2438,6 +2549,40 @@ fn buffer_lines(buffer: &ratatui::buffer::Buffer) -> Vec<String> {
         lines.push(line);
     }
     lines
+}
+
+fn average_background_brightness(
+    buffer: &ratatui::buffer::Buffer,
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16,
+) -> u16 {
+    let mut total = 0u32;
+    let mut count = 0u32;
+    for row in y..y.saturating_add(height).min(buffer.area.height) {
+        for column in x..x.saturating_add(width).min(buffer.area.width) {
+            let cell = &buffer[(column, row)];
+            if cell.symbol() == " " {
+                total += color_brightness(cell.bg) as u32;
+                count += 1;
+            }
+        }
+    }
+    if count == 0 {
+        0
+    } else {
+        (total / count) as u16
+    }
+}
+
+fn color_brightness(color: ratatui::style::Color) -> u16 {
+    match color {
+        ratatui::style::Color::Rgb(red, green, blue) => {
+            (red as u16 + green as u16 + blue as u16) / 3
+        }
+        _ => 0,
+    }
 }
 
 fn first_non_space_column(line: &str) -> Option<usize> {

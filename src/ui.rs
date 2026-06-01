@@ -34,12 +34,11 @@ pub fn render_app(frame: &mut Frame<'_>, app: &App) {
     render_backdrop(frame, area);
     let stage = stage_rect(area);
     render_header(frame, stage, app);
-
     let scene = scene_layout(area);
+    render_workspace_shell(frame, area, scene, app);
     render_stats_rail(frame, scene.rail, app);
     render_iso_board(frame, scene.board, app);
     render_grimoire(frame, scene.grimoire, app);
-
     if let Some(drag) = app.active_drag() {
         let drag_area = match drag.origin {
             crate::app::DragOrigin::Inventory => atlas_panel(
@@ -68,33 +67,31 @@ fn render_backdrop(frame: &mut Frame<'_>, area: Rect) {
     if area.width == 0 || area.height == 0 {
         return;
     }
-    // A lit alchemist's chamber, painted purely with cell *backgrounds* (spaces,
-    // never glyphs) so it reads as a real atmospheric surface and is never
-    // mistaken for sprite/graphic content. A smooth vertical gradient gives the
-    // void depth: a deep starry vault up top fades through a faint mid-air
-    // horizon glow down to a calm stone floor in shadow. Brighter motes scatter
-    // like stars across the upper vault and grow sparse and dim near the floor.
+    // A lit alchemist's chamber, painted purely with cell *backgrounds*
+    // (spaces, never glyphs) so it reads as atmosphere rather than noisy
+    // foreground art. The backdrop now has three deliberate layers:
+    // a dark upper vault, a warm central working glow, and a quieter floor
+    // vignette. Motes are sparse decoration only.
     let h = area.height.max(1) as f32;
+    let w = area.width.max(1) as f32;
     for y in area.y..area.y.saturating_add(area.height) {
         let t = y.saturating_sub(area.y) as f32 / (h - 1.0).max(1.0);
-        let base = chamber_gradient(t);
+        let local_y = t;
         let in_vault = t < 0.5;
         let mut spans = Vec::with_capacity(area.width as usize);
         for x in area.x..area.x.saturating_add(area.width) {
+            let local_x = x.saturating_sub(area.x) as f32 / (w - 1.0).max(1.0);
+            let mut bg = chamber_surface(local_x, local_y);
             let hash = speck_hash(x, y);
-            let bg = if in_vault {
-                match hash % 43 {
+            if in_vault {
+                bg = match hash % 113 {
                     0 => Surfaces::SPECK_LIT,
-                    5 | 17 | 29 => Surfaces::SPECK_DIM,
-                    _ => base,
-                }
-            } else {
-                // Floor: only an occasional dim dust mote, so it stays calm.
-                match hash % 97 {
-                    0 => Surfaces::SPECK_DIM,
-                    _ => base,
-                }
-            };
+                    17 | 71 => Surfaces::SPECK_DIM,
+                    _ => bg,
+                };
+            } else if hash.is_multiple_of(211) {
+                bg = Surfaces::SPECK_DIM;
+            }
             spans.push(Span::styled(" ", Style::default().bg(bg)));
         }
         render_line(
@@ -128,6 +125,36 @@ fn chamber_gradient(t: f32) -> Color {
     let k = ((t - t0) / span).clamp(0.0, 1.0);
     let lerp = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * k).round() as u8;
     Color::Rgb(lerp(r0, r1), lerp(g0, g1), lerp(b0, b1))
+}
+
+fn chamber_surface(x: f32, y: f32) -> Color {
+    let base = chamber_gradient(y);
+    let dx = (x - 0.5).abs() * 2.0;
+    let dy = (y - 0.72).abs() * 2.4;
+    let glow = (1.0 - (dx * dx * 0.72 + dy * dy)).clamp(0.0, 1.0);
+    let warmed = mix_color(base, Color::Rgb(36, 31, 42), glow * 0.52);
+
+    let edge = ((dx - 0.68) / 0.32).clamp(0.0, 1.0);
+    mix_color(warmed, Color::Rgb(7, 8, 14), edge * 0.38)
+}
+
+fn mix_color(a: Color, b: Color, t: f32) -> Color {
+    let (ar, ag, ab) = rgb_components(a);
+    let (br, bg, bb) = rgb_components(b);
+    let t = t.clamp(0.0, 1.0);
+    let mix = |left: u8, right: u8| {
+        (left as f32 + (right as f32 - left as f32) * t)
+            .round()
+            .clamp(0.0, 255.0) as u8
+    };
+    Color::Rgb(mix(ar, br), mix(ag, bg), mix(ab, bb))
+}
+
+fn rgb_components(color: Color) -> (u8, u8, u8) {
+    match color {
+        Color::Rgb(red, green, blue) => (red, green, blue),
+        _ => (0, 0, 0),
+    }
 }
 
 fn speck_hash(x: u16, y: u16) -> u32 {
@@ -223,6 +250,94 @@ fn render_panel_frame(frame: &mut Frame<'_>, area: Rect, title: &str, title_colo
         ),
         Line::from(Span::styled(base, corner)),
     );
+}
+
+fn render_workspace_shell(frame: &mut Frame<'_>, area: Rect, scene: crate::layout::SceneLayout, app: &App) {
+    if area.width < 90 || area.height < 18 {
+        return;
+    }
+
+    let state = app.active_state();
+    let visible = atlas_visible_count(scene.board, app.active_palette().len(), state.palette_scroll);
+    let rail = rail_sections(scene.rail).panel;
+    let atlas = atlas_panel(scene.board, visible);
+    let recipe = grimoire_layout(scene.grimoire).panel;
+    let shell = expand_rect(union_rect(union_rect(rail, atlas), recipe), 2, 1, area);
+    if shell.width < 12 || shell.height < 6 {
+        return;
+    }
+
+    fill_rect_bg(frame, shell, Color::Rgb(10, 12, 20));
+    render_shell_frame(frame, shell);
+}
+
+fn render_shell_frame(frame: &mut Frame<'_>, area: Rect) {
+    if area.width < 4 || area.height < 3 {
+        return;
+    }
+    let rim = Style::default()
+        .fg(Color::Rgb(64, 49, 34))
+        .bg(Color::Rgb(10, 12, 20));
+    let title = Style::default()
+        .fg(palette_color(Ink::TITLE))
+        .bg(Color::Rgb(64, 49, 34))
+        .add_modifier(Modifier::BOLD);
+    let inner_w = area.width.saturating_sub(2);
+    let title_line = center_line(Line::from(Span::styled("✦ workshop", title)), inner_w);
+    let mut top = vec![Span::styled("▛", rim)];
+    top.extend(
+        title_line
+            .spans
+            .into_iter()
+            .map(|span| Span::styled(span.content, title)),
+    );
+    top.push(Span::styled("▜", rim));
+    render_line(frame, Rect::new(area.x, area.y, area.width, 1), Line::from(top));
+
+    for y in area.y.saturating_add(1)..area.y.saturating_add(area.height.saturating_sub(1)) {
+        render_line(frame, Rect::new(area.x, y, 1, 1), Line::from(Span::styled("▌", rim)));
+        render_line(
+            frame,
+            Rect::new(area.x.saturating_add(area.width.saturating_sub(1)), y, 1, 1),
+            Line::from(Span::styled("▐", rim)),
+        );
+    }
+
+    let mut base = String::with_capacity(area.width as usize);
+    base.push('▙');
+    for i in 0..inner_w {
+        base.push(if i == inner_w / 2 { '▓' } else { '▄' });
+    }
+    base.push('▟');
+    render_line(
+        frame,
+        Rect::new(area.x, area.y.saturating_add(area.height.saturating_sub(1)), area.width, 1),
+        Line::from(Span::styled(base, rim)),
+    );
+}
+
+fn union_rect(a: Rect, b: Rect) -> Rect {
+    let x0 = a.x.min(b.x);
+    let y0 = a.y.min(b.y);
+    let x1 = a.x.saturating_add(a.width).max(b.x.saturating_add(b.width));
+    let y1 = a.y.saturating_add(a.height).max(b.y.saturating_add(b.height));
+    Rect::new(x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0))
+}
+
+fn expand_rect(rect: Rect, dx: u16, dy: u16, bounds: Rect) -> Rect {
+    let x0 = rect.x.saturating_sub(dx).max(bounds.x);
+    let y0 = rect.y.saturating_sub(dy).max(bounds.y);
+    let x1 = rect
+        .x
+        .saturating_add(rect.width)
+        .saturating_add(dx)
+        .min(bounds.x.saturating_add(bounds.width));
+    let y1 = rect
+        .y
+        .saturating_add(rect.height)
+        .saturating_add(dy)
+        .min(bounds.y.saturating_add(bounds.height));
+    Rect::new(x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0))
 }
 
 fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
@@ -538,15 +653,26 @@ fn render_iso_board(frame: &mut Frame<'_>, area: Rect, app: &App) {
         } else {
             app.tick_counter
         };
-        let mut sprite_lines =
-            sprite_lines_for_element_frame(catalog.kind, element, 8, 10, sprite_tick);
+        let max_sprite_lines = (cell.top.height as usize)
+            .saturating_sub(label_lines.len())
+            .max(1);
+        let sprite_width = if cell.top.width > 10 {
+            cell.top.width.saturating_sub(2).clamp(12, 18)
+        } else {
+            8
+        };
+        let sprite_height = if cell.top.height > 6 { 16 } else { 10 };
+        let mut sprite_lines = sprite_lines_for_element_frame(
+            catalog.kind,
+            element,
+            sprite_width as u32,
+            sprite_height as u32,
+            sprite_tick,
+        );
         if has_birth_effect {
             sprite_lines = living_sprite_glint(sprite_lines, app.tick_counter, palette_color(9));
             sprite_lines = lines_with_empty_halo(sprite_lines, birth_halo_bg(&element.name));
         }
-        let max_sprite_lines = (cell.top.height as usize)
-            .saturating_sub(label_lines.len())
-            .max(1);
         sprite_lines = crop_lines_to_height(sprite_lines, max_sprite_lines);
 
         let mut lines = sprite_lines;

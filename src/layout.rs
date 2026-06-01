@@ -11,12 +11,11 @@ pub(crate) const NARROW_BREAKPOINT: u16 = 70;
 pub(crate) const BOARD_HERO_PCT: u16 = 55;
 // Max content width — keeps columns cohesive on very wide terminals. Height is
 // never capped (fully responsive vertically).
-pub(crate) const STAGE_MAX_WIDTH: u16 = 128;
+pub(crate) const STAGE_MAX_WIDTH: u16 = 156;
 
 // --- Isometric shelf tile geometry ---
-// Tile width 10 keeps ~10-char element labels on a single line; depth comes
-// from a front riser + cast shadow rather than a side sliver, so columns stay
-// dense enough for the discovery board.
+// Default tile geometry keeps normal and short terminals dense. Larger cells are
+// selected dynamically for wide workspaces with only a few visible elements.
 pub(crate) const ISO_TILE_WIDTH: u16 = 10;
 pub(crate) const ISO_TILE_HEIGHT: u16 = 6; // 5 sprite rows + 1 label row
 pub(crate) const ISO_DEPTH: u16 = 1; // front riser height
@@ -28,6 +27,50 @@ pub(crate) const ISO_STAGGER: u16 = 1; // odd-row horizontal recede
 const ISO_COL_STRIDE: u16 = ISO_TILE_WIDTH + ISO_SIDE + ISO_GAP_X;
 const ISO_ROW_STRIDE: u16 = ISO_TILE_HEIGHT + ISO_DEPTH + ISO_SHADOW;
 
+#[derive(Debug, Clone, Copy)]
+struct IsoGeometry {
+    tile_width: u16,
+    tile_height: u16,
+    depth: u16,
+    shadow: u16,
+    side: u16,
+    gap_x: u16,
+    stagger: u16,
+}
+
+impl IsoGeometry {
+    const DEFAULT: Self = Self {
+        tile_width: ISO_TILE_WIDTH,
+        tile_height: ISO_TILE_HEIGHT,
+        depth: ISO_DEPTH,
+        shadow: ISO_SHADOW,
+        side: ISO_SIDE,
+        gap_x: ISO_GAP_X,
+        stagger: ISO_STAGGER,
+    };
+
+    const LARGE: Self = Self {
+        tile_width: 18,
+        tile_height: 11,
+        depth: 1,
+        shadow: 1,
+        side: 0,
+        gap_x: 2,
+        stagger: 1,
+    };
+
+    fn col_stride(self) -> u16 {
+        self.tile_width
+            .saturating_add(self.side)
+            .saturating_add(self.gap_x)
+    }
+
+    fn row_stride(self) -> u16 {
+        self.tile_height
+            .saturating_add(self.depth)
+            .saturating_add(self.shadow)
+    }
+}
 pub(crate) fn contains(rect: Rect, column: u16, row: u16) -> bool {
     column >= rect.x
         && column < rect.x.saturating_add(rect.width)
@@ -82,7 +125,7 @@ pub(crate) fn scene_layout(area: Rect) -> SceneLayout {
         let grimoire_h = 12.min(after_rail.saturating_sub(6)).max(8).min(after_rail);
         let after_grimoire = after_rail.saturating_sub(grimoire_h);
         let board_h = if after_grimoire >= 6 {
-            after_grimoire.min(16)
+            after_grimoire.min(12)
         } else {
             after_grimoire
         };
@@ -130,6 +173,33 @@ pub(crate) fn scene_layout(area: Rect) -> SceneLayout {
     }
 }
 
+fn iso_geometry(area: Rect, visible_count: usize) -> IsoGeometry {
+    if visible_count <= 8 && area.width >= 70 && area.height >= 12 {
+        IsoGeometry::LARGE
+    } else {
+        IsoGeometry::DEFAULT
+    }
+}
+
+fn iso_columns_for(area: Rect, geometry: IsoGeometry) -> usize {
+    ((area
+        .width
+        .saturating_sub(geometry.stagger)
+        .saturating_add(geometry.gap_x))
+        / geometry.col_stride())
+    .max(1) as usize
+}
+
+fn iso_rows_for(area: Rect, geometry: IsoGeometry) -> usize {
+    (area.height / geometry.row_stride()).max(1) as usize
+}
+
+fn iso_capacity_for(area: Rect, geometry: IsoGeometry) -> usize {
+    iso_columns_for(area, geometry)
+        .saturating_mul(iso_rows_for(area, geometry))
+        .max(1)
+}
+
 fn centered_offset(available: u16, content: u16) -> u16 {
     available.saturating_sub(content) / 2
 }
@@ -137,7 +207,8 @@ fn centered_offset(available: u16, content: u16) -> u16 {
 pub(crate) fn atlas_visible_count(area: Rect, total: usize, scroll: usize) -> usize {
     let available = board_inner(area);
     let remaining = total.saturating_sub(scroll);
-    remaining.min(iso_capacity(available)).max(1)
+    let geometry = iso_geometry(available, remaining);
+    remaining.min(iso_capacity_for(available, geometry)).max(1)
 }
 
 pub(crate) fn atlas_panel(area: Rect, count: usize) -> Rect {
@@ -150,8 +221,9 @@ pub(crate) fn atlas_panel(area: Rect, count: usize) -> Rect {
         return area;
     }
 
-    let max_columns = iso_columns(available).max(1);
-    let max_rows = iso_rows(available).max(1);
+    let geometry = iso_geometry(available, count);
+    let max_columns = iso_columns_for(available, geometry).max(1);
+    let max_rows = iso_rows_for(available, geometry).max(1);
     let visible = count.max(1);
     let min_rows = visible.div_ceil(max_columns).min(max_rows).max(1);
     let columns = (1..=max_columns)
@@ -164,16 +236,22 @@ pub(crate) fn atlas_panel(area: Rect, count: usize) -> Rect {
         })
         .unwrap_or(max_columns);
     let rows = visible.div_ceil(columns).min(max_rows);
-    let content_w = ISO_STAGGER
-        .saturating_add((columns as u16).saturating_mul(ISO_COL_STRIDE))
-        .saturating_sub(ISO_GAP_X);
-    let content_h = (rows as u16).saturating_mul(ISO_ROW_STRIDE);
+    let content_w = geometry
+        .stagger
+        .saturating_add((columns as u16).saturating_mul(geometry.col_stride()))
+        .saturating_sub(geometry.gap_x);
+    let content_h = (rows as u16).saturating_mul(geometry.row_stride());
     let panel_w = content_w.saturating_add(2).clamp(14, area.width);
     let panel_h = content_h.saturating_add(2).clamp(10, area.height);
     let x = area
         .x
         .saturating_add((area.width.saturating_sub(panel_w)) / 2);
-    let y = area.y.saturating_add(centered_offset(area.height, panel_h));
+    let y_offset = if area.height <= 18 {
+        centered_offset(area.height, panel_h).min(1)
+    } else {
+        centered_offset(area.height, panel_h)
+    };
+    let y = area.y.saturating_add(y_offset);
     Rect::new(x, y, panel_w, panel_h)
 }
 
@@ -279,8 +357,10 @@ pub(crate) fn iso_board_cells(area: Rect, count: usize, scroll: usize) -> Vec<Is
     if area.width == 0 || area.height == 0 {
         return Vec::new();
     }
-    let columns = iso_columns(area);
-    let capacity = iso_capacity(area);
+    let remaining = count.saturating_sub(scroll);
+    let geometry = iso_geometry(area, remaining);
+    let columns = iso_columns_for(area, geometry);
+    let capacity = iso_capacity_for(area, geometry);
     let start = scroll.min(count);
     let end = start.saturating_add(capacity).min(count);
     let mut cells = Vec::with_capacity(end.saturating_sub(start));
@@ -289,32 +369,36 @@ pub(crate) fn iso_board_cells(area: Rect, count: usize, scroll: usize) -> Vec<Is
         let local = index - start;
         let row = (local / columns) as u16;
         let col = (local % columns) as u16;
-        let stagger = (row % 2) * ISO_STAGGER;
-        let x = area.x.saturating_add(stagger + col * ISO_COL_STRIDE);
-        let y = area.y.saturating_add(row * ISO_ROW_STRIDE);
+        let stagger = (row % 2) * geometry.stagger;
+        let x = area.x.saturating_add(stagger + col * geometry.col_stride());
+        let y = area.y.saturating_add(row * geometry.row_stride());
 
-        if y.saturating_add(ISO_TILE_HEIGHT) > area.y.saturating_add(area.height) {
+        if y.saturating_add(geometry.tile_height) > area.y.saturating_add(area.height) {
             break;
         }
 
-        let top = Rect::new(x, y, ISO_TILE_WIDTH, ISO_TILE_HEIGHT);
+        let top = Rect::new(x, y, geometry.tile_width, geometry.tile_height);
         let face = Rect::new(
             x,
-            y.saturating_add(ISO_TILE_HEIGHT),
-            ISO_TILE_WIDTH,
-            ISO_DEPTH,
+            y.saturating_add(geometry.tile_height),
+            geometry.tile_width,
+            geometry.depth,
         );
         let side = Rect::new(
-            x.saturating_add(ISO_TILE_WIDTH),
+            x.saturating_add(geometry.tile_width),
             y.saturating_add(1),
-            ISO_SIDE,
-            ISO_TILE_HEIGHT.saturating_add(ISO_DEPTH).saturating_sub(1),
+            geometry.side,
+            geometry
+                .tile_height
+                .saturating_add(geometry.depth)
+                .saturating_sub(1),
         );
         let shadow = Rect::new(
             x.saturating_add(1),
-            y.saturating_add(ISO_TILE_HEIGHT).saturating_add(ISO_DEPTH),
-            ISO_TILE_WIDTH,
-            ISO_SHADOW,
+            y.saturating_add(geometry.tile_height)
+                .saturating_add(geometry.depth),
+            geometry.tile_width,
+            geometry.shadow,
         );
 
         cells.push(IsoCell {
