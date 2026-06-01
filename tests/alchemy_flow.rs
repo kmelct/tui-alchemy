@@ -696,7 +696,6 @@ fn backdrop_specks_are_sparse_enough_to_read_as_atmosphere() {
     );
 }
 
-
 #[test]
 fn wide_layout_wraps_panels_in_one_workshop_shell() {
     let backend = TestBackend::new(160, 50);
@@ -720,7 +719,7 @@ fn same_app_redraws_cleanly_across_dynamic_resize_steps() {
         "Metal", "Sand", "Sky", "Storm", "Glass", "Life", "Human", "Tool",
     ]);
 
-    for (width, height, expect_shell) in [(64, 40, false), (100, 24, true), (160, 50, true)] {
+    for (width, height, expect_shell) in [(64, 40, false), (100, 24, false), (160, 50, true)] {
         let backend = TestBackend::new(width, height);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|frame| app.render(frame)).unwrap();
@@ -813,27 +812,13 @@ fn tall_layout_balances_the_scene_in_the_middle_of_the_chamber() {
 
     terminal.draw(|frame| app.render(frame)).unwrap();
     let lines = buffer_lines(terminal.backend().buffer());
-    let anchors = [
-        "progress",
-        "atlas",
-        "recipe table",
-        "steam",
-        "sea",
-        "book",
-        "result",
-    ];
-    let rows = anchors
-        .iter()
-        .filter_map(|needle| find_text_position(&lines, needle).map(|(_, row)| row as usize))
-        .collect::<Vec<_>>();
-    let top = *rows.iter().min().expect("expected visible scene anchors");
-    let bottom = *rows.iter().max().expect("expected visible scene anchors");
-    let top_pad = top;
-    let bottom_pad = lines.len().saturating_sub(bottom + 1);
+    let progress = find_text_position(&lines, "progress").expect("expected progress title");
+    let atlas = find_text_position(&lines, "atlas").expect("expected atlas title");
+    let recipe = find_text_position(&lines, "recipe table").expect("expected recipe table title");
 
     assert!(
-        top_pad.abs_diff(bottom_pad) <= 10,
-        "tall layouts should center the active scene vertically instead of leaving a giant dead floor:\n{}",
+        progress.1.abs_diff(atlas.1) <= 1 && recipe.1.abs_diff(atlas.1) <= 1 && atlas.1 <= 10,
+        "tall layouts should keep the three main panels pinned to a shared top band instead of letting one drift lower into the background:\n{}",
         lines.join("\n")
     );
 }
@@ -851,6 +836,37 @@ fn atlas_uses_the_same_framed_title_bar_as_the_other_fantasy_panels() {
         text.contains("✦ atlas"),
         "the atlas should be framed as a titled fantasy panel instead of a loose label:\n{text}"
     );
+}
+
+#[test]
+fn fantasy_panel_titles_are_embedded_in_two_sided_borders() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+    app.reveal_elements_for_preview(&[
+        "Dust", "Energy", "Lava", "Mud", "Rain", "Sea", "Steam", "Cloud", "Plant", "Stone",
+        "Metal", "Sand",
+    ]);
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+
+    for title in ["workshop", "progress", "atlas", "recipe table"] {
+        let row = lines
+            .iter()
+            .find(|line| line.contains(title))
+            .unwrap_or_else(|| panic!("expected {title} title:\n{}", lines.join("\n")));
+        assert_eq!(
+            row.matches(title).count(),
+            1,
+            "a fantasy frame should own one clear title, not repeat a loose label:\n{row}"
+        );
+        assert!(
+            row_has_two_sided_title_border(row, title),
+            "title `{title}` should be embedded into a continuous two-sided border like the CLI reference, not float inside a filled bar:\n{row}\n\n{}",
+            lines.join("\n")
+        );
+    }
 }
 
 #[test]
@@ -1418,12 +1434,69 @@ fn wide_initial_atlas_scales_starter_sprites_for_large_viewports() {
     terminal.draw(|frame| app.render(frame)).unwrap();
     let lines = buffer_lines(terminal.backend().buffer());
     let air = find_text_position(&lines, "air").expect("expected air tile");
-    let rows = graphic_row_count_above_label(&lines, air, 12, 10);
-    let width = graphic_span_width_above_label(&lines, air, 12, 10);
+    let rows = graphic_row_count_above_label(&lines, air, 10, 8);
+    let width = graphic_span_width_above_label(&lines, air, 12, 8);
 
     assert!(
-        rows >= 8 && width >= 12,
+        rows >= 5 && width >= 11,
         "large viewports should scale starter sprites up instead of rendering tiny fixed icons; rows={rows}, width={width}\n{}",
+        lines.join("\n")
+    );
+}
+
+#[test]
+fn wide_viewport_keeps_panel_positions_stable_as_the_palette_grows() {
+    let backend = TestBackend::new(160, 50);
+    let mut small_terminal = Terminal::new(backend).unwrap();
+    let mut small = App::new();
+    small_terminal.draw(|frame| small.render(frame)).unwrap();
+    let small_text = buffer_to_text(small_terminal.backend().buffer());
+    let small_lines = buffer_lines(small_terminal.backend().buffer());
+    let small_workshop =
+        find_text_position(&small_lines, "workshop").expect("expected workshop shell");
+    let small_atlas = find_text_position(&small_lines, "atlas").expect("expected atlas title");
+    let small_recipe =
+        find_text_position(&small_lines, "recipe table").expect("expected recipe table title");
+
+    let backend = TestBackend::new(160, 50);
+    let mut grown_terminal = Terminal::new(backend).unwrap();
+    let mut grown = App::new();
+    grown.reveal_elements_for_preview(&["Lava", "Cloud", "Steam"]);
+    grown_terminal.draw(|frame| grown.render(frame)).unwrap();
+    let grown_text = buffer_to_text(grown_terminal.backend().buffer());
+    let grown_lines = buffer_lines(grown_terminal.backend().buffer());
+    let grown_workshop =
+        find_text_position(&grown_lines, "workshop").expect("expected workshop shell");
+    let grown_atlas = find_text_position(&grown_lines, "atlas").expect("expected atlas title");
+    let grown_recipe =
+        find_text_position(&grown_lines, "recipe table").expect("expected recipe table title");
+
+    assert_eq!(
+        (small_workshop.1, small_atlas.1, small_recipe.1),
+        (grown_workshop.1, grown_atlas.1, grown_recipe.1),
+        "growing the palette should not make the main panels jump to different rows:\nSMALL\n{small_text}\n\nGROWN\n{grown_text}"
+    );
+}
+
+#[test]
+fn wide_workshop_shell_aligns_panel_titles_on_one_top_band() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+    app.reveal_elements_for_preview(&[
+        "Dust", "Energy", "Lava", "Mud", "Rain", "Sea", "Steam", "Cloud", "Plant", "Stone",
+        "Metal", "Sand",
+    ]);
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let progress = find_text_position(&lines, "progress").expect("expected progress title");
+    let atlas = find_text_position(&lines, "atlas").expect("expected atlas title");
+    let recipe = find_text_position(&lines, "recipe table").expect("expected recipe table title");
+
+    assert!(
+        progress.1.abs_diff(atlas.1) <= 1 && recipe.1.abs_diff(atlas.1) <= 1,
+        "wide layouts should align the three panel titles along one top band instead of floating side cards lower than the atlas:\n{}",
         lines.join("\n")
     );
 }
@@ -1496,9 +1569,9 @@ fn starter_sprites_stay_compact_inside_tiles() {
 
     for label in ["air", "earth", "fire", "water"] {
         let position = find_text_position(&lines, label).expect("expected starter tile");
-        let rows = graphic_row_count_above_label(&lines, position, 9, 8);
+        let rows = graphic_row_count_above_label(&lines, position, 10, 9);
         assert!(
-            rows <= 8,
+            rows <= 9,
             "{label} icon should stay compact even when responsive tiles scale up; rows={rows}\n{}",
             lines.join("\n")
         );
@@ -2594,6 +2667,29 @@ fn last_non_space_column(line: &str) -> Option<usize> {
         .enumerate()
         .filter_map(|(index, ch)| (ch != ' ').then_some(index))
         .last()
+}
+
+fn row_has_two_sided_title_border(row: &str, title: &str) -> bool {
+    let Some(byte_column) = row.find(title) else {
+        return false;
+    };
+    let title_start = row[..byte_column].chars().count();
+    let title_end = title_start + title.chars().count();
+    let chars = row.chars().collect::<Vec<_>>();
+    let left_rails = chars[..title_start]
+        .iter()
+        .filter(|&&ch| is_title_border_rail(ch))
+        .count();
+    let right_rails = chars[title_end..]
+        .iter()
+        .filter(|&&ch| is_title_border_rail(ch))
+        .count();
+
+    left_rails >= 2 && right_rails >= 2
+}
+
+fn is_title_border_rail(ch: char) -> bool {
+    matches!(ch, '─' | '━' | '═' | '╌' | '╾' | '╼')
 }
 
 fn find_text_position(lines: &[String], needle: &str) -> Option<(u16, u16)> {

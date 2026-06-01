@@ -50,12 +50,12 @@ impl IsoGeometry {
     };
 
     const LARGE: Self = Self {
-        tile_width: 18,
-        tile_height: 11,
+        tile_width: 14,
+        tile_height: 8,
         depth: 1,
         shadow: 1,
         side: 0,
-        gap_x: 2,
+        gap_x: 1,
         stagger: 1,
     };
 
@@ -173,8 +173,8 @@ pub(crate) fn scene_layout(area: Rect) -> SceneLayout {
     }
 }
 
-fn iso_geometry(area: Rect, visible_count: usize) -> IsoGeometry {
-    if visible_count <= 8 && area.width >= 70 && area.height >= 12 {
+fn iso_geometry(area: Rect) -> IsoGeometry {
+    if area.width >= 60 && area.height >= 12 {
         IsoGeometry::LARGE
     } else {
         IsoGeometry::DEFAULT
@@ -205,54 +205,62 @@ fn centered_offset(available: u16, content: u16) -> u16 {
 }
 
 pub(crate) fn atlas_visible_count(area: Rect, total: usize, scroll: usize) -> usize {
-    let available = board_inner(area);
+    let panel = atlas_panel(area, total.saturating_sub(scroll));
+    let available = board_inner(panel);
     let remaining = total.saturating_sub(scroll);
-    let geometry = iso_geometry(available, remaining);
+    let geometry = iso_geometry(available);
     remaining.min(iso_capacity_for(available, geometry)).max(1)
 }
-
 pub(crate) fn atlas_panel(area: Rect, count: usize) -> Rect {
-    if area.width == 0 || area.height == 0 {
-        return area;
-    }
-
-    let available = board_inner(area);
-    if available.width == 0 || available.height == 0 {
-        return area;
-    }
-
-    let geometry = iso_geometry(available, count);
-    let max_columns = iso_columns_for(available, geometry).max(1);
-    let max_rows = iso_rows_for(available, geometry).max(1);
-    let visible = count.max(1);
-    let min_rows = visible.div_ceil(max_columns).min(max_rows).max(1);
-    let columns = (1..=max_columns)
-        .filter(|cols| visible.div_ceil(*cols) == min_rows)
-        .min_by_key(|cols| {
-            (
-                min_rows.saturating_mul(*cols).saturating_sub(visible),
-                *cols,
-            )
-        })
-        .unwrap_or(max_columns);
-    let rows = visible.div_ceil(columns).min(max_rows);
-    let content_w = geometry
-        .stagger
-        .saturating_add((columns as u16).saturating_mul(geometry.col_stride()))
-        .saturating_sub(geometry.gap_x);
-    let content_h = (rows as u16).saturating_mul(geometry.row_stride());
-    let panel_w = content_w.saturating_add(2).clamp(14, area.width);
-    let panel_h = content_h.saturating_add(2).clamp(10, area.height);
-    let x = area
-        .x
-        .saturating_add((area.width.saturating_sub(panel_w)) / 2);
-    let y_offset = if area.height <= 18 {
-        centered_offset(area.height, panel_h).min(1)
+    if area.width >= 60 && area.height >= 18 {
+        let available = board_inner(area);
+        let geometry = iso_geometry(available);
+        let rows = 2usize.min(iso_rows_for(available, geometry).max(1));
+        let panel_h = ((rows as u16).saturating_mul(geometry.row_stride()))
+            .saturating_add(2)
+            .clamp(12, area.height);
+        Rect::new(area.x, area.y, area.width, panel_h)
     } else {
-        centered_offset(area.height, panel_h)
-    };
-    let y = area.y.saturating_add(y_offset);
-    Rect::new(x, y, panel_w, panel_h)
+        let available = board_inner(area);
+        if available.width == 0 || available.height == 0 {
+            return area;
+        }
+
+        let geometry = iso_geometry(available);
+        let max_columns = iso_columns_for(available, geometry).max(1);
+        let max_rows = iso_rows_for(available, geometry).max(1);
+        let visible = count.max(1);
+        let min_rows = visible.div_ceil(max_columns).min(max_rows).max(1);
+        let columns = (1..=max_columns)
+            .filter(|cols| visible.div_ceil(*cols) == min_rows)
+            .min_by_key(|cols| {
+                (
+                    min_rows.saturating_mul(*cols).saturating_sub(visible),
+                    *cols,
+                )
+            })
+            .unwrap_or(max_columns);
+        let rows = visible.div_ceil(columns).min(max_rows);
+        let content_w = geometry
+            .stagger
+            .saturating_add((columns as u16).saturating_mul(geometry.col_stride()))
+            .saturating_sub(geometry.gap_x);
+        let content_h = (rows as u16).saturating_mul(geometry.row_stride());
+        let panel_w = content_w.saturating_add(2).clamp(14, area.width);
+        let panel_h = content_h.saturating_add(2).clamp(10, area.height);
+        let x = area
+            .x
+            .saturating_add((area.width.saturating_sub(panel_w)) / 2);
+        let y_offset = if area.height >= 20 {
+            0
+        } else if area.height <= 18 {
+            centered_offset(area.height, panel_h).min(1)
+        } else {
+            centered_offset(area.height, panel_h)
+        };
+        let y = area.y.saturating_add(y_offset);
+        Rect::new(x, y, panel_w, panel_h)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -269,9 +277,10 @@ pub(crate) fn rail_sections(rail: Rect) -> RailSections {
     // into chamber backdrop around it instead of dead panel body.
     let panel_h = rail.height.clamp(8, 13).min(rail.height.max(1));
     let panel_w = if rail.width > 28 { 24 } else { rail.width };
+    let panel_y = rail.y;
     let panel = Rect::new(
         rail.x.saturating_add(centered_offset(rail.width, panel_w)),
-        rail.y.saturating_add(centered_offset(rail.height, panel_h)),
+        panel_y,
         panel_w,
         panel_h,
     );
@@ -352,27 +361,51 @@ pub(crate) fn iso_rows(area: Rect) -> usize {
 pub(crate) fn iso_capacity(area: Rect) -> usize {
     iso_columns(area).saturating_mul(iso_rows(area)).max(1)
 }
-
 pub(crate) fn iso_board_cells(area: Rect, count: usize, scroll: usize) -> Vec<IsoCell> {
     if area.width == 0 || area.height == 0 {
         return Vec::new();
     }
-    let remaining = count.saturating_sub(scroll);
-    let geometry = iso_geometry(area, remaining);
-    let columns = iso_columns_for(area, geometry);
+
+    let geometry = iso_geometry(area);
+    let max_columns = iso_columns_for(area, geometry);
     let capacity = iso_capacity_for(area, geometry);
     let start = scroll.min(count);
     let end = start.saturating_add(capacity).min(count);
     let mut cells = Vec::with_capacity(end.saturating_sub(start));
+    let visible = end.saturating_sub(start).max(1);
+
+    let columns = if area.width >= 60 && area.height >= 18 {
+        visible.min(max_columns).max(1)
+    } else {
+        let max_rows = iso_rows_for(area, geometry).max(1);
+        let min_rows = visible.div_ceil(max_columns).min(max_rows).max(1);
+        (1..=max_columns)
+            .filter(|cols| visible.div_ceil(*cols) == min_rows)
+            .min_by_key(|cols| {
+                (
+                    min_rows.saturating_mul(*cols).saturating_sub(visible),
+                    *cols,
+                )
+            })
+            .unwrap_or(max_columns)
+    };
+
+    let content_w = geometry
+        .stagger
+        .saturating_add((columns as u16).saturating_mul(geometry.col_stride()))
+        .saturating_sub(geometry.gap_x);
+    let origin_x = area
+        .x
+        .saturating_add(centered_offset(area.width, content_w));
+    let origin_y = area.y;
 
     for index in start..end {
         let local = index - start;
         let row = (local / columns) as u16;
         let col = (local % columns) as u16;
         let stagger = (row % 2) * geometry.stagger;
-        let x = area.x.saturating_add(stagger + col * geometry.col_stride());
-        let y = area.y.saturating_add(row * geometry.row_stride());
-
+        let x = origin_x.saturating_add(stagger + col * geometry.col_stride());
+        let y = origin_y.saturating_add(row * geometry.row_stride());
         if y.saturating_add(geometry.tile_height) > area.y.saturating_add(area.height) {
             break;
         }
@@ -421,6 +454,22 @@ pub(crate) fn iso_hit(cells: &[IsoCell], column: u16, row: u16) -> Option<usize>
         .map(|cell| cell.index)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn atlas_panel_keeps_a_stable_slot_on_the_same_viewport() {
+        let board = Rect::new(0, 0, 80, 24);
+        let small = atlas_panel(board, 4);
+        let grown = atlas_panel(board, 7);
+
+        assert_eq!(
+            small, grown,
+            "discovering a few more elements should not make the atlas panel itself grow or shrink within the same viewport"
+        );
+    }
+}
 /// The recipe-table panel: a compact, bronze-rimmed bar holding three sockets
 /// laid out horizontally — `ingredient + ingredient = result`. It is centred
 /// vertically in its column rather than stretched, so it never becomes a tall
@@ -440,12 +489,8 @@ pub(crate) fn grimoire_layout(area: Rect) -> GrimoireLayout {
     // Compact recipe panel: keep the device readable and vertically balanced in
     // tall viewports instead of stretching it into a ribbon pinned to the top.
     let panel_h = area.height.clamp(9, 14).min(area.height.max(1));
-    let panel = Rect::new(
-        area.x,
-        area.y.saturating_add(centered_offset(area.height, panel_h)),
-        area.width,
-        panel_h,
-    );
+    let panel_y = area.y;
+    let panel = Rect::new(area.x, panel_y, area.width, panel_h);
     let inner = inset(panel, 1);
     let nameplate = Rect::new(inner.x, inner.y, inner.width, 1);
     let body = Rect::new(

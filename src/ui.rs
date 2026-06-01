@@ -17,6 +17,7 @@ use ratatui::widgets::{Paragraph, Wrap};
 const HUD_BG: Color = Surfaces::RAIL_BG;
 const HUD_RIM: Color = Surfaces::RAIL_RIM;
 const HUD_SHADOW: Color = Surfaces::RAIL_SHADOW;
+const TITLE_BORDER_RAIL: &str = "─";
 
 // Sprite-effect colours pinned by the birth/aura tests (do not fold into theme).
 const BIRTH_GLOW_BG: Color = Color::Rgb(56, 52, 45);
@@ -181,9 +182,41 @@ fn fill_rect_bg(frame: &mut Frame<'_>, area: Rect, bg: Color) {
     );
 }
 
-/// A bronze-rimmed dark panel: a solid bronze title bar with beveled corners,
-/// thin side posts, and a clean base with a single centred stud. Shared by the
-/// stats rail and the recipe table so every panel reads identically.
+fn render_titled_top_border(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    title: &str,
+    rim: Style,
+    title_style: Style,
+) {
+    let inner_w = area.width.saturating_sub(2) as usize;
+    let label = fit_label(&format!(" ✦ {title} "), inner_w);
+    let label_w = label.chars().count();
+    let rail_total = inner_w.saturating_sub(label_w);
+    let left_rails = rail_total / 2;
+    let right_rails = rail_total.saturating_sub(left_rails);
+    let mut top = Vec::with_capacity(5);
+    top.push(Span::styled("▛", rim));
+    if left_rails > 0 {
+        top.push(Span::styled(TITLE_BORDER_RAIL.repeat(left_rails), rim));
+    }
+    if label_w > 0 {
+        top.push(Span::styled(label, title_style));
+    }
+    if right_rails > 0 {
+        top.push(Span::styled(TITLE_BORDER_RAIL.repeat(right_rails), rim));
+    }
+    top.push(Span::styled("▜", rim));
+    render_line(
+        frame,
+        Rect::new(area.x, area.y, area.width, 1),
+        Line::from(top),
+    );
+}
+
+/// A bronze-rimmed dark panel with its title cut into the top border. The
+/// title is owned by the frame (one label, rails on both sides), matching the
+/// CLI-style bordered command cards while keeping the heavier fantasy base.
 fn render_panel_frame(frame: &mut Frame<'_>, area: Rect, title: &str, title_color: Color) {
     if area.width == 0 || area.height == 0 {
         return;
@@ -193,42 +226,28 @@ fn render_panel_frame(frame: &mut Frame<'_>, area: Rect, title: &str, title_colo
         return;
     }
 
-    let corner = Style::default()
+    let rim = Style::default()
         .fg(Surfaces::PANEL_RIM)
         .bg(Surfaces::PANEL_BG);
-    let bar = Style::default()
+    let title_style = Style::default()
         .fg(title_color)
-        .bg(Surfaces::PANEL_RIM)
+        .bg(Surfaces::PANEL_BG)
         .add_modifier(Modifier::BOLD);
     let inner_w = area.width.saturating_sub(2);
 
-    // Top: ▛ + solid bronze title bar (emblem + title, centred) + ▜
-    let titled = center_line(Line::from(Span::styled(format!("✦ {title}"), bar)), inner_w);
-    let mut top = vec![Span::styled("▛", corner)];
-    top.extend(
-        titled
-            .spans
-            .into_iter()
-            .map(|span| Span::styled(span.content, bar)),
-    );
-    top.push(Span::styled("▜", corner));
-    render_line(
-        frame,
-        Rect::new(area.x, area.y, area.width, 1),
-        Line::from(top),
-    );
+    render_titled_top_border(frame, area, title, rim, title_style);
 
     // Side posts.
     for y in area.y.saturating_add(1)..area.y.saturating_add(area.height.saturating_sub(1)) {
         render_line(
             frame,
             Rect::new(area.x, y, 1, 1),
-            Line::from(Span::styled("▌", corner)),
+            Line::from(Span::styled("▌", rim)),
         );
         render_line(
             frame,
             Rect::new(area.x.saturating_add(area.width.saturating_sub(1)), y, 1, 1),
-            Line::from(Span::styled("▐", corner)),
+            Line::from(Span::styled("▐", rim)),
         );
     }
 
@@ -248,17 +267,26 @@ fn render_panel_frame(frame: &mut Frame<'_>, area: Rect, title: &str, title_colo
             area.width,
             1,
         ),
-        Line::from(Span::styled(base, corner)),
+        Line::from(Span::styled(base, rim)),
     );
 }
 
-fn render_workspace_shell(frame: &mut Frame<'_>, area: Rect, scene: crate::layout::SceneLayout, app: &App) {
-    if area.width < 90 || area.height < 18 {
+fn render_workspace_shell(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    scene: crate::layout::SceneLayout,
+    app: &App,
+) {
+    if area.width < 130 || area.height < 24 {
         return;
     }
 
     let state = app.active_state();
-    let visible = atlas_visible_count(scene.board, app.active_palette().len(), state.palette_scroll);
+    let visible = atlas_visible_count(
+        scene.board,
+        app.active_palette().len(),
+        state.palette_scroll,
+    );
     let rail = rail_sections(scene.rail).panel;
     let atlas = atlas_panel(scene.board, visible);
     let recipe = grimoire_layout(scene.grimoire).panel;
@@ -280,22 +308,17 @@ fn render_shell_frame(frame: &mut Frame<'_>, area: Rect) {
         .bg(Color::Rgb(10, 12, 20));
     let title = Style::default()
         .fg(palette_color(Ink::TITLE))
-        .bg(Color::Rgb(64, 49, 34))
+        .bg(Color::Rgb(10, 12, 20))
         .add_modifier(Modifier::BOLD);
     let inner_w = area.width.saturating_sub(2);
-    let title_line = center_line(Line::from(Span::styled("✦ workshop", title)), inner_w);
-    let mut top = vec![Span::styled("▛", rim)];
-    top.extend(
-        title_line
-            .spans
-            .into_iter()
-            .map(|span| Span::styled(span.content, title)),
-    );
-    top.push(Span::styled("▜", rim));
-    render_line(frame, Rect::new(area.x, area.y, area.width, 1), Line::from(top));
+    render_titled_top_border(frame, area, "workshop", rim, title);
 
     for y in area.y.saturating_add(1)..area.y.saturating_add(area.height.saturating_sub(1)) {
-        render_line(frame, Rect::new(area.x, y, 1, 1), Line::from(Span::styled("▌", rim)));
+        render_line(
+            frame,
+            Rect::new(area.x, y, 1, 1),
+            Line::from(Span::styled("▌", rim)),
+        );
         render_line(
             frame,
             Rect::new(area.x.saturating_add(area.width.saturating_sub(1)), y, 1, 1),
@@ -311,7 +334,12 @@ fn render_shell_frame(frame: &mut Frame<'_>, area: Rect) {
     base.push('▟');
     render_line(
         frame,
-        Rect::new(area.x, area.y.saturating_add(area.height.saturating_sub(1)), area.width, 1),
+        Rect::new(
+            area.x,
+            area.y.saturating_add(area.height.saturating_sub(1)),
+            area.width,
+            1,
+        ),
         Line::from(Span::styled(base, rim)),
     );
 }
@@ -320,7 +348,9 @@ fn union_rect(a: Rect, b: Rect) -> Rect {
     let x0 = a.x.min(b.x);
     let y0 = a.y.min(b.y);
     let x1 = a.x.saturating_add(a.width).max(b.x.saturating_add(b.width));
-    let y1 = a.y.saturating_add(a.height).max(b.y.saturating_add(b.height));
+    let y1 =
+        a.y.saturating_add(a.height)
+            .max(b.y.saturating_add(b.height));
     Rect::new(x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0))
 }
 
@@ -661,7 +691,7 @@ fn render_iso_board(frame: &mut Frame<'_>, area: Rect, app: &App) {
         } else {
             8
         };
-        let sprite_height = if cell.top.height > 6 { 16 } else { 10 };
+        let sprite_height = if cell.top.height > 6 { 12 } else { 10 };
         let mut sprite_lines = sprite_lines_for_element_frame(
             catalog.kind,
             element,
