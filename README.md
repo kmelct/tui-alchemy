@@ -1,5 +1,4 @@
-<p align="center">Alchemy TUI</p>
-
+<h1 align="center">Alchemy TUI 🧙‍♂️</h1>
 <p align="center">
   <strong>A terminal alchemy crafting game with a 755-element recipe book, Ratatui UI, and generated pixel-art sprites.</strong>
 </p>
