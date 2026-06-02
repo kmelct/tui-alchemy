@@ -729,6 +729,13 @@ fn render_iso_board(frame: &mut Frame<'_>, area: Rect, app: &App) {
         lines.extend(label_lines);
         render_iso_pedestal(frame, cell);
         render_iso_tile_face(frame, cell.top, accent, top_bg, lines);
+        render_iso_tile_frame(
+            frame,
+            cell.top,
+            max_sprite_lines.min(cell.top.height as usize) as u16,
+            palette_color(Ink::FRAME),
+            top_bg,
+        );
     }
 }
 
@@ -775,6 +782,58 @@ fn render_iso_tile_face(
         .alignment(ratatui::layout::Alignment::Left)
         .wrap(Wrap { trim: false });
     frame.render_widget(paragraph, top);
+}
+
+fn render_iso_tile_frame(
+    frame: &mut Frame<'_>,
+    top: Rect,
+    framed_rows: u16,
+    frame_fg: Color,
+    frame_bg: Color,
+) {
+    let framed_rows = framed_rows.min(top.height);
+    if top.width < 3 || framed_rows < 3 {
+        return;
+    }
+
+    let side_style = Style::default().fg(frame_fg).bg(frame_bg);
+    let left_x = top.x;
+    let right_x = top.x.saturating_add(top.width.saturating_sub(1));
+    let bottom_y = top.y.saturating_add(framed_rows.saturating_sub(1));
+
+    render_line(
+        frame,
+        Rect::new(left_x, top.y, 1, 1),
+        Line::from(Span::styled("▘", side_style)),
+    );
+    render_line(
+        frame,
+        Rect::new(right_x, top.y, 1, 1),
+        Line::from(Span::styled("▝", side_style)),
+    );
+    render_line(
+        frame,
+        Rect::new(left_x, bottom_y, 1, 1),
+        Line::from(Span::styled("▖", side_style)),
+    );
+    render_line(
+        frame,
+        Rect::new(right_x, bottom_y, 1, 1),
+        Line::from(Span::styled("▗", side_style)),
+    );
+
+    for y in top.y.saturating_add(1)..bottom_y {
+        render_line(
+            frame,
+            Rect::new(left_x, y, 1, 1),
+            Line::from(Span::styled("▌", side_style)),
+        );
+        render_line(
+            frame,
+            Rect::new(right_x, y, 1, 1),
+            Line::from(Span::styled("▐", side_style)),
+        );
+    }
 }
 
 // ===========================================================================

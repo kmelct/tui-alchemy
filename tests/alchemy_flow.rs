@@ -1061,6 +1061,31 @@ fn workbench_surface_has_table_legs_not_debug_side_noise() {
 }
 
 #[test]
+fn atlas_tiles_have_their_own_fantasy_picture_frames() {
+    let backend = TestBackend::new(100, 28);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let air = find_text_position(&lines, "air").expect("expected air tile");
+    let framed_glyphs = count_matching_chars_in_region(
+        &lines,
+        air.0.saturating_sub(3),
+        air.1.saturating_sub(8),
+        air.0.saturating_add(5),
+        air.1,
+        &['▌', '▐', '▘', '▝', '▖', '▗'],
+    );
+
+    assert!(
+        framed_glyphs >= 12,
+        "atlas cards should have their own fantasy picture frames instead of blending straight into the panel:\n{}",
+        lines.join("\n")
+    );
+}
+
+#[test]
 fn atlas_surfaces_do_not_use_heavy_box_frames() {
     let backend = TestBackend::new(100, 28);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -2758,6 +2783,29 @@ fn find_text_position_in_region(
         }
     }
     None
+}
+
+fn count_matching_chars_in_region(
+    lines: &[String],
+    x0: u16,
+    y0: u16,
+    x1: u16,
+    y1: u16,
+    matches: &[char],
+) -> usize {
+    let y_end = y1.min(lines.len() as u16);
+    (y0..y_end)
+        .map(|row| {
+            let line = &lines[row as usize];
+            line.chars()
+                .enumerate()
+                .filter(|(column, ch)| {
+                    let column = *column as u16;
+                    column >= x0 && column < x1 && matches.contains(ch)
+                })
+                .count()
+        })
+        .sum()
 }
 
 fn count_graphic_rows_above_label(
