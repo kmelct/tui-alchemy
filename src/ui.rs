@@ -380,6 +380,14 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
 
     let title_style = Style::default().bg(HUD_BG);
     let title_spans = vec![
+        Span::styled("✦ ", title_style.fg(palette_color(5))),
+        Span::styled(
+            "TUI",
+            title_style
+                .fg(palette_color(14))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" ✦  ", title_style.fg(palette_color(5))),
         Span::styled(
             "little alchemy",
             title_style

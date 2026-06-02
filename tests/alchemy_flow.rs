@@ -599,6 +599,26 @@ fn header_status_sits_inside_a_framed_plaque_not_bare_text() {
 }
 
 #[test]
+fn header_carries_a_clear_fantasy_tui_badge() {
+    let backend = TestBackend::new(100, 28);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let header = buffer_lines(terminal.backend().buffer())
+        .iter()
+        .take(2)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(
+        header.contains("TUI") && header.contains("little alchemy"),
+        "header should carry a clear fantasy TUI badge alongside the game title:\n{header}"
+    );
+}
+
+#[test]
 fn header_logo_reads_like_a_centered_banner_on_wide_terminals() {
     let backend = TestBackend::new(100, 28);
     let mut terminal = Terminal::new(backend).unwrap();
