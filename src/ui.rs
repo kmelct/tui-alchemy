@@ -4,8 +4,8 @@ mod sprite_strategy;
 use crate::app::App;
 use crate::effects::ElementStyle;
 use crate::layout::{
-    IsoCell, atlas_panel, atlas_visible_count, board_inner, grimoire_layout, iso_board_cells,
-    rail_sections, scene_layout, stage_rect,
+    IsoCell, atlas_page_count, atlas_page_size, atlas_panel, atlas_tab_rects, board_inner,
+    grimoire_layout, iso_board_cells, rail_sections, scene_layout, stage_rect,
 };
 use crate::palette::{palette_color, palette_color_for_seed};
 use crate::sprites::{sprite_lines_for_element_frame, sprite_lines_for_path_with_size};
@@ -47,11 +47,7 @@ pub fn render_app(frame: &mut Frame<'_>, app: &App) {
         let drag_area = match drag.origin {
             crate::app::DragOrigin::Inventory => atlas_panel(
                 scene.board,
-                atlas_visible_count(
-                    scene.board,
-                    app.active_palette().len(),
-                    app.active_state().palette_scroll,
-                ),
+                atlas_page_size(scene.board, app.active_palette().len()),
             ),
             crate::app::DragOrigin::Slot => grimoire_layout(scene.grimoire).panel,
         };
@@ -562,6 +558,48 @@ fn render_shelf_tile(
 // Isometric discovery board (centre)
 // ===========================================================================
 
+fn render_atlas_tabs(frame: &mut Frame<'_>, panel: Rect, page: usize, page_count: usize) {
+    if page_count <= 1 || panel.width < 18 {
+        return;
+    }
+
+    let summary = format!(" page {}/{} ", page.saturating_add(1), page_count);
+    let summary_width = summary.chars().count() as u16;
+    if summary_width < panel.width.saturating_sub(2) {
+        render_line(
+            frame,
+            Rect::new(
+                panel.x.saturating_add(2),
+                panel.y,
+                summary_width.min(panel.width.saturating_sub(2)),
+                1,
+            ),
+            Line::from(Span::styled(
+                summary,
+                Style::default()
+                    .fg(palette_color(Ink::HINT))
+                    .bg(Surfaces::PANEL_BG),
+            )),
+        );
+    }
+
+    for tab in atlas_tab_rects(panel, page_count, page) {
+        let style = Style::default()
+            .fg(if tab.active {
+                palette_color(Ink::TITLE)
+            } else {
+                palette_color(Ink::MUTED)
+            })
+            .bg(Surfaces::PANEL_BG)
+            .add_modifier(if tab.active {
+                Modifier::BOLD
+            } else {
+                Modifier::empty()
+            });
+        render_line(frame, tab.rect, Line::from(Span::styled(tab.label, style)));
+    }
+}
+
 fn render_iso_board(frame: &mut Frame<'_>, area: Rect, app: &App) {
     if area.width == 0 || area.height == 0 {
         return;
@@ -570,12 +608,21 @@ fn render_iso_board(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let catalog = app.active_catalog();
     let state = app.active_state();
     let palette = app.active_palette();
-    let visible_count = atlas_visible_count(area, palette.len(), state.palette_scroll);
-    let panel = atlas_panel(area, visible_count);
+    let page_size = atlas_page_size(area, palette.len());
+    let page_count = atlas_page_count(area, palette.len());
+    let page = state.palette_page.min(page_count.saturating_sub(1));
+    let page_start = app.active_palette_page_start();
+    let visible_count = palette
+        .len()
+        .saturating_sub(page_start)
+        .min(page_size)
+        .max(1);
+    let panel = atlas_panel(area, page_size);
     render_panel_frame(frame, panel, "atlas", palette_color(Ink::FRAME));
+    render_atlas_tabs(frame, panel, page, page_count);
 
     let inner = board_inner(panel);
-    let cells = iso_board_cells(inner, palette.len(), state.palette_scroll);
+    let cells = iso_board_cells(inner, page_start.saturating_add(visible_count), page_start);
 
     for cell in &cells {
         let element_index = palette[cell.index];

@@ -70,6 +70,15 @@ impl IsoGeometry {
             .saturating_add(self.shadow)
     }
 }
+
+#[derive(Debug, Clone)]
+pub(crate) struct AtlasTab {
+    pub page: usize,
+    pub rect: Rect,
+    pub label: String,
+    pub active: bool,
+}
+
 pub(crate) const fn contains(rect: Rect, column: u16, row: u16) -> bool {
     column >= rect.x
         && column < rect.x.saturating_add(rect.width)
@@ -220,12 +229,71 @@ const fn centered_offset(available: u16, content: u16) -> u16 {
     available.saturating_sub(content) / 2
 }
 
-pub(crate) fn atlas_visible_count(area: Rect, total: usize, scroll: usize) -> usize {
-    let panel = atlas_panel(area, total.saturating_sub(scroll));
+pub(crate) fn atlas_page_size(area: Rect, total: usize) -> usize {
+    if total == 0 {
+        return 1;
+    }
+    let panel = atlas_panel(area, total);
     let available = board_inner(panel);
-    let remaining = total.saturating_sub(scroll);
     let geometry = iso_geometry(available);
-    remaining.min(iso_capacity_for(available, geometry)).max(1)
+    total.min(iso_capacity_for(available, geometry)).max(1)
+}
+
+pub(crate) fn atlas_page_count(area: Rect, total: usize) -> usize {
+    if total == 0 {
+        return 1;
+    }
+    total.div_ceil(atlas_page_size(area, total)).max(1)
+}
+
+pub(crate) fn atlas_page_start(area: Rect, total: usize, page: usize) -> usize {
+    let page_size = atlas_page_size(area, total);
+    let max_page = atlas_page_count(area, total).saturating_sub(1);
+    page.min(max_page).saturating_mul(page_size).min(total)
+}
+
+pub(crate) fn atlas_tab_rects(panel: Rect, page_count: usize, active_page: usize) -> Vec<AtlasTab> {
+    if page_count <= 1 || panel.width < 18 || panel.height == 0 {
+        return Vec::new();
+    }
+    let digit_width = page_count.to_string().len().max(1) as u16;
+    let tab_width = digit_width.saturating_add(2);
+    let available = panel.width.saturating_sub(4).max(1);
+    let max_tabs = ((available.saturating_add(1)) / (tab_width.saturating_add(1)))
+        .max(1)
+        .min(page_count as u16) as usize;
+    let active_page = active_page.min(page_count.saturating_sub(1));
+    let start_page = if page_count <= max_tabs {
+        0
+    } else {
+        active_page
+            .saturating_sub(max_tabs / 2)
+            .min(page_count.saturating_sub(max_tabs))
+    };
+    let visible_pages = max_tabs.min(page_count.saturating_sub(start_page));
+    let total_w = (visible_pages as u16)
+        .saturating_mul(tab_width)
+        .saturating_add(visible_pages.saturating_sub(1) as u16);
+    let mut x = panel
+        .x
+        .saturating_add(panel.width.saturating_sub(1).saturating_sub(total_w));
+    let mut tabs = Vec::with_capacity(visible_pages);
+    for page in start_page..start_page.saturating_add(visible_pages) {
+        let active = page == active_page;
+        let page_number = page.saturating_add(1);
+        let label = format!(
+            "[{page_number:>digit_width$}]",
+            digit_width = digit_width as usize
+        );
+        tabs.push(AtlasTab {
+            page,
+            rect: Rect::new(x, panel.y, tab_width, 1),
+            label,
+            active,
+        });
+        x = x.saturating_add(tab_width.saturating_add(1));
+    }
+    tabs
 }
 pub(crate) fn atlas_panel(area: Rect, count: usize) -> Rect {
     let available = board_inner(area);
@@ -365,10 +433,7 @@ pub(crate) fn iso_columns(area: Rect) -> usize {
     iso_columns_for(area, iso_geometry(area))
 }
 
-pub(crate) fn iso_capacity(area: Rect) -> usize {
-    iso_capacity_for(area, iso_geometry(area))
-}
-pub(crate) fn iso_board_cells(area: Rect, count: usize, scroll: usize) -> Vec<IsoCell> {
+pub(crate) fn iso_board_cells(area: Rect, count: usize, start: usize) -> Vec<IsoCell> {
     if area.width == 0 || area.height == 0 {
         return Vec::new();
     }
@@ -376,7 +441,7 @@ pub(crate) fn iso_board_cells(area: Rect, count: usize, scroll: usize) -> Vec<Is
     let geometry = iso_geometry(area);
     let max_columns = iso_columns_for(area, geometry);
     let capacity = iso_capacity_for(area, geometry);
-    let start = scroll.min(count);
+    let start = start.min(count);
     let end = start.saturating_add(capacity).min(count);
     let mut cells = Vec::with_capacity(end.saturating_sub(start));
     let visible = end.saturating_sub(start).max(1);
@@ -466,27 +531,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tall_atlas_panel_uses_available_height_before_scrolling() {
+    fn tall_atlas_panel_uses_available_height_before_paging() {
         let board = Rect::new(0, 0, 80, 42);
         let two_rows = atlas_panel(board, 10);
         let three_rows = atlas_panel(board, 11);
 
         assert!(
             three_rows.height > two_rows.height,
-            "a tall atlas should grow to another row before requiring scroll"
+            "a tall atlas should grow to another row before requiring another page"
         );
         assert_eq!(
-            atlas_visible_count(board, 11, 0),
+            atlas_page_size(board, 11),
             11,
-            "eleven discoveries should fit in the available tall atlas before scrolling"
+            "eleven discoveries should fit in the available tall atlas before paging"
         );
 
-        let full_page = atlas_visible_count(board, 21, 0);
+        let full_page = atlas_page_size(board, 21);
         let full_panel = atlas_panel(board, full_page);
         assert_eq!(
-            iso_capacity(board_inner(full_panel)),
+            atlas_page_size(full_panel, 21),
             full_page,
-            "scroll capacity should match the rendered wide-screen atlas geometry"
+            "page capacity should match the rendered wide-screen atlas geometry"
         );
     }
 

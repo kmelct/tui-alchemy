@@ -8,25 +8,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     save_view("01-initial", 100, 32, &[])?;
     save_view("02-created-steam", 100, 32, &["Steam"])?;
     save_view("03-drag-ghost", 100, 32, &["Steam", "Mud"])?;
-    save_view(
-        "04-populated-board",
-        100,
-        32,
-        &[
-            "Dust", "Energy", "Lava", "Mud", "Rain", "Sea", "Steam", "Cloud", "Plant", "Stone",
-            "Metal", "Sand", "Sky", "Storm", "Glass", "Life", "Human", "Tool",
-        ],
-    )?;
+    save_view("04-populated-board", 100, 32, MANY_DISCOVERIES)?;
     save_view("05-narrow", 64, 40, &["Steam", "Mud", "Lava", "Rain"])?;
-    save_view(
-        "06-xlarge",
-        200,
-        60,
-        &[
-            "Dust", "Energy", "Lava", "Mud", "Rain", "Sea", "Steam", "Cloud", "Plant", "Stone",
-            "Metal", "Sand", "Sky", "Storm", "Glass", "Life", "Human", "Tool",
-        ],
-    )?;
+    save_view("06-xlarge", 200, 60, MANY_DISCOVERIES)?;
     save_view(
         "07-height-24",
         100,
@@ -42,6 +26,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Wrote PNGs to output/screenshot/");
     Ok(())
 }
+
+const MANY_DISCOVERIES: &[&str] = &[
+    "Dust",
+    "Energy",
+    "Lava",
+    "Mud",
+    "Rain",
+    "Sea",
+    "Steam",
+    "Cloud",
+    "Plant",
+    "Stone",
+    "Metal",
+    "Sand",
+    "Sky",
+    "Storm",
+    "Glass",
+    "Life",
+    "Human",
+    "Tool",
+    "Wind",
+    "Eruption",
+    "Smoke",
+    "Land",
+    "Mist",
+    "Lightning",
+];
 
 fn save_view(
     name: &str,

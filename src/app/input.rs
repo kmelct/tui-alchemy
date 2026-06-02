@@ -1,8 +1,8 @@
 use super::{App, HitTarget};
 use crate::app::{DragOrigin, DragState};
 use crate::layout::{
-    atlas_panel, atlas_visible_count, board_inner, contains, grimoire_layout, iso_board_cells,
-    iso_capacity, iso_columns, iso_hit, scene_layout,
+    atlas_page_count, atlas_page_size, atlas_panel, atlas_tab_rects, board_inner, contains,
+    grimoire_layout, iso_board_cells, iso_columns, iso_hit, scene_layout,
 };
 use crossterm::event::{Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
@@ -26,12 +26,8 @@ impl App {
             }
             KeyCode::Left | KeyCode::Char('h') => self.move_palette_cursor(-1),
             KeyCode::Right | KeyCode::Char('l') => self.move_palette_cursor(1),
-            KeyCode::PageUp => {
-                self.move_palette_cursor(-(self.inventory_visible_capacity().max(1) as isize))
-            }
-            KeyCode::PageDown => {
-                self.move_palette_cursor(self.inventory_visible_capacity().max(1) as isize)
-            }
+            KeyCode::PageUp => self.move_palette_page(-1),
+            KeyCode::PageDown => self.move_palette_page(1),
             KeyCode::Home => self.move_palette_cursor_to_start(),
             KeyCode::End => self.move_palette_cursor_to_end(),
             KeyCode::Esc => self.active_state_mut().clear_selection(),
@@ -41,6 +37,10 @@ impl App {
                     if (1..=9).contains(&digit) {
                         self.select_visible_slot((digit - 1) as usize);
                     }
+                } else if ch == '[' {
+                    self.move_palette_page(-1);
+                } else if ch == ']' {
+                    self.move_palette_page(1);
                 } else if ch == 'c' || ch == 'C' {
                     self.active_state_mut().clear_selection();
                 }
@@ -51,11 +51,13 @@ impl App {
 
     fn handle_mouse(&mut self, mouse: MouseEvent) {
         match mouse.kind {
-            MouseEventKind::Down(MouseButton::Left) => self.begin_drag(mouse),
+            MouseEventKind::Down(MouseButton::Left) => {
+                if !self.click_atlas_tab(mouse.column, mouse.row) {
+                    self.begin_drag(mouse);
+                }
+            }
             MouseEventKind::Drag(MouseButton::Left) => self.update_drag(mouse),
             MouseEventKind::Up(MouseButton::Left) => self.finish_drag(mouse),
-            MouseEventKind::ScrollUp => self.scroll_at(mouse.column, mouse.row, -1),
-            MouseEventKind::ScrollDown => self.scroll_at(mouse.column, mouse.row, 1),
             _ => {}
         }
     }
@@ -115,48 +117,26 @@ impl App {
         }
     }
 
-    fn scroll_at(&mut self, column: u16, row: u16, delta: isize) {
-        if self.hit_inventory_panel(column, row) {
-            self.scroll_inventory(delta);
-        }
-    }
-
-    pub(super) fn scroll_inventory(&mut self, delta: isize) {
-        if delta == 0 {
-            return;
-        }
-
-        let palette = self.active_palette();
-        if palette.is_empty() {
-            return;
-        }
-
-        let step = self.inventory_columns().max(1) as isize;
-        let max_scroll = palette
-            .len()
-            .saturating_sub(self.inventory_visible_capacity().max(1));
-        let current_scroll = self.active_state().palette_scroll as isize;
-        let next = current_scroll + delta.saturating_mul(step);
-        let state = self.active_state_mut();
-        state.palette_scroll = next.clamp(0, max_scroll as isize) as usize;
-        state.palette_cursor = state.palette_scroll.min(palette.len().saturating_sub(1));
-    }
-
-    fn hit_inventory_panel(&self, column: u16, row: u16) -> bool {
+    fn click_atlas_tab(&mut self, column: u16, row: u16) -> bool {
         if self.viewport.width == 0 || self.viewport.height == 0 {
             return false;
         }
 
+        let palette_len = self.active_palette().len();
+        if palette_len == 0 {
+            return false;
+        }
         let scene = scene_layout(self.viewport);
-        let inventory = atlas_panel(
-            scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
-        );
-        contains(inventory, column, row)
+        let page_count = atlas_page_count(scene.board, palette_len);
+        let panel = atlas_panel(scene.board, atlas_page_size(scene.board, palette_len));
+        for tab in atlas_tab_rects(panel, page_count, self.active_state().palette_page) {
+            if contains(tab.rect, column, row) {
+                self.set_palette_page(tab.page);
+                return true;
+            }
+        }
+
+        false
     }
 
     fn hit_test(&self, column: u16, row: u16) -> Option<HitTarget> {
@@ -167,11 +147,7 @@ impl App {
         let scene = scene_layout(self.viewport);
         let inventory = atlas_panel(
             scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
+            atlas_page_size(scene.board, self.active_palette().len()),
         );
 
         if contains(inventory, column, row) {
@@ -189,11 +165,7 @@ impl App {
         let scene = scene_layout(self.viewport);
         let inner = board_inner(atlas_panel(
             scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
+            atlas_page_size(scene.board, self.active_palette().len()),
         ));
 
         if !contains(inner, column, row) {
@@ -201,8 +173,8 @@ impl App {
         }
 
         let palette = self.active_palette();
-        let state = self.active_state();
-        let cells = iso_board_cells(inner, palette.len(), state.palette_scroll);
+        let page_start = self.active_palette_page_start();
+        let cells = iso_board_cells(inner, palette.len(), page_start);
         iso_hit(&cells, column, row)
             .and_then(|visible_index| palette.get(visible_index).copied())
             .map(HitTarget::Inventory)
@@ -226,25 +198,12 @@ impl App {
         let scene = scene_layout(self.viewport);
         let panel = atlas_panel(
             scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
+            atlas_page_size(scene.board, self.active_palette().len()),
         );
         iso_columns(board_inner(panel))
     }
 
     pub(super) fn inventory_visible_capacity(&self) -> usize {
-        let scene = scene_layout(self.viewport);
-        let panel = atlas_panel(
-            scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
-        );
-        iso_capacity(board_inner(panel))
+        self.active_palette_page_size()
     }
 }

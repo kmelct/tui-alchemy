@@ -298,6 +298,52 @@ fn wide_layout_uses_panel_borders_without_a_second_page_shell() {
 }
 
 #[test]
+fn atlas_uses_page_tabs_instead_of_scroll_position() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+    reveal_many_elements(&mut app);
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let text = buffer_to_text(terminal.backend().buffer());
+    assert!(
+        text.contains("page 1/"),
+        "atlas should expose a discrete page tab strip instead of hidden scroll state:\n{text}"
+    );
+
+    app.handle_event(key(KeyCode::PageDown));
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let text = buffer_to_text(terminal.backend().buffer());
+    assert!(
+        text.contains("page 2/"),
+        "PageDown should switch to the next atlas page tab:\n{text}"
+    );
+}
+
+#[test]
+fn mouse_clicking_an_atlas_tab_switches_pages() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+    reveal_many_elements(&mut app);
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let tab = find_text_position(&lines, "[2]").expect("expected second atlas page tab");
+    app.handle_event(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        tab.0 + 1,
+        tab.1,
+    ));
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let text = buffer_to_text(terminal.backend().buffer());
+    assert!(
+        text.contains("page 2/"),
+        "clicking a page tab should switch the atlas page:\n{text}"
+    );
+}
+
+#[test]
 fn live_workbench_state_survives_dynamic_resize() {
     let mut app = App::new();
     let mut terminal = Terminal::new(TestBackend::new(100, 28)).unwrap();
@@ -321,6 +367,35 @@ fn live_workbench_state_survives_dynamic_resize() {
             "expected result to survive resize {width}x{height}: {text}"
         );
     }
+}
+
+fn reveal_many_elements(app: &mut App) {
+    app.reveal_elements_for_preview(&[
+        "Dust",
+        "Energy",
+        "Lava",
+        "Mud",
+        "Rain",
+        "Sea",
+        "Steam",
+        "Cloud",
+        "Plant",
+        "Stone",
+        "Metal",
+        "Sand",
+        "Sky",
+        "Storm",
+        "Glass",
+        "Life",
+        "Human",
+        "Tool",
+        "Wind",
+        "Eruption",
+        "Smoke",
+        "Land",
+        "Mist",
+        "Lightning",
+    ]);
 }
 
 fn craft_steam_via_workbench(

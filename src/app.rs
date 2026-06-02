@@ -3,6 +3,7 @@ pub(crate) mod state;
 
 use crate::data::{GameCatalog, active_palette_indices, normalize};
 use crate::effects::ElementEffect;
+use crate::layout::{atlas_page_size, atlas_page_start, scene_layout};
 use crate::ui;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -47,6 +48,7 @@ impl App {
 
     pub fn render(&mut self, frame: &mut Frame<'_>) {
         self.viewport = frame.area();
+        self.sync_active_palette_page_to_cursor();
         ui::render_app(frame, self);
     }
 
@@ -83,7 +85,7 @@ impl App {
         state.slot_flash = [0, 0];
         state.recipe_preview = None;
         state.palette_cursor = self.catalogs[catalog_index].base_indices.len();
-        state.palette_scroll = self.catalogs[catalog_index].base_indices.len();
+        state.palette_page = 0;
     }
 
     pub fn tick(&mut self) {
@@ -170,8 +172,9 @@ impl App {
     }
 
     fn select_visible_slot(&mut self, palette_slot: usize) {
-        let state = self.active_state();
-        let palette_index = state.palette_scroll.saturating_add(palette_slot);
+        let palette_index = self
+            .active_palette_page_start()
+            .saturating_add(palette_slot);
         let palette = self.active_palette();
         let Some(&element_index) = palette.get(palette_index) else {
             return;
@@ -237,7 +240,7 @@ impl App {
         let page_size = self.inventory_visible_capacity().max(1);
         let state = self.active_state_mut();
         state.palette_cursor = cursor as usize;
-        Self::sync_palette_scroll(state, palette.len(), page_size);
+        Self::sync_palette_page(state, palette.len(), page_size);
     }
 
     fn move_palette_cursor_to_start(&mut self) {
@@ -248,7 +251,7 @@ impl App {
         let page_size = self.inventory_visible_capacity().max(1);
         let state = self.active_state_mut();
         state.palette_cursor = 0;
-        Self::sync_palette_scroll(state, palette.len(), page_size);
+        Self::sync_palette_page(state, palette.len(), page_size);
     }
 
     fn move_palette_cursor_to_end(&mut self) {
@@ -259,26 +262,78 @@ impl App {
         let page_size = self.inventory_visible_capacity().max(1);
         let state = self.active_state_mut();
         state.palette_cursor = palette.len() - 1;
-        Self::sync_palette_scroll(state, palette.len(), page_size);
+        Self::sync_palette_page(state, palette.len(), page_size);
     }
 
-    fn sync_palette_scroll(state: &mut CatalogState, palette_len: usize, page_size: usize) {
-        if palette_len <= page_size {
-            state.palette_scroll = 0;
+    fn move_palette_page(&mut self, delta: isize) {
+        let palette_len = self.active_palette().len();
+        if palette_len == 0 {
+            return;
+        }
+        let page_size = self.inventory_visible_capacity().max(1);
+        let page_count = palette_len.div_ceil(page_size).max(1);
+        let current = self
+            .active_state()
+            .palette_page
+            .min(page_count.saturating_sub(1));
+        let next = (current as isize)
+            .saturating_add(delta)
+            .clamp(0, page_count.saturating_sub(1) as isize) as usize;
+        self.set_palette_page(next);
+    }
+
+    fn set_palette_page(&mut self, page: usize) {
+        let palette_len = self.active_palette().len();
+        if palette_len == 0 {
+            return;
+        }
+        let page_size = self.inventory_visible_capacity().max(1);
+        let page_count = palette_len.div_ceil(page_size).max(1);
+        let page = page.min(page_count.saturating_sub(1));
+        let cursor = page
+            .saturating_mul(page_size)
+            .min(palette_len.saturating_sub(1));
+        let state = self.active_state_mut();
+        state.palette_page = page;
+        state.palette_cursor = cursor;
+    }
+
+    fn sync_active_palette_page_to_cursor(&mut self) {
+        let palette_len = self.active_palette().len();
+        let page_size = self.inventory_visible_capacity().max(1);
+        let state = self.active_state_mut();
+        Self::sync_palette_page(state, palette_len, page_size);
+    }
+
+    fn sync_palette_page(state: &mut CatalogState, palette_len: usize, page_size: usize) {
+        if palette_len == 0 {
+            state.palette_page = 0;
+            state.palette_cursor = 0;
             return;
         }
 
-        if state.palette_cursor < state.palette_scroll {
-            state.palette_scroll = state.palette_cursor;
-        } else if state.palette_cursor >= state.palette_scroll + page_size {
-            state.palette_scroll = state
-                .palette_cursor
-                .saturating_add(1)
-                .saturating_sub(page_size);
-        }
+        let page_size = page_size.max(1);
+        state.palette_cursor = state.palette_cursor.min(palette_len.saturating_sub(1));
+        let max_page = palette_len.saturating_sub(1) / page_size;
+        state.palette_page = (state.palette_cursor / page_size).min(max_page);
+    }
 
-        let max_scroll = palette_len.saturating_sub(page_size);
-        state.palette_scroll = state.palette_scroll.min(max_scroll);
+    pub(crate) fn active_palette_page_start(&self) -> usize {
+        let palette_len = self.active_palette().len();
+        if palette_len == 0 || self.viewport.width == 0 || self.viewport.height == 0 {
+            return 0;
+        }
+        let scene = scene_layout(self.viewport);
+        atlas_page_start(scene.board, palette_len, self.active_state().palette_page)
+    }
+
+    pub(crate) fn active_palette_page_size(&self) -> usize {
+        let palette_len = self.active_palette().len();
+        if palette_len == 0 || self.viewport.width == 0 || self.viewport.height == 0 {
+            return 1;
+        }
+        let scene = scene_layout(self.viewport);
+        atlas_page_size(scene.board, palette_len)
     }
 
     fn resolve_active_selection(&mut self) {
@@ -352,7 +407,7 @@ impl App {
             let page_size = self.inventory_visible_capacity().max(1);
             let state = &mut self.states[catalog_index];
             state.palette_cursor = position;
-            Self::sync_palette_scroll(state, palette.len(), page_size);
+            Self::sync_palette_page(state, palette.len(), page_size);
         }
 
         {
@@ -430,7 +485,7 @@ mod tests {
     use super::*;
     use crate::data::CatalogKind;
     use crate::layout::{
-        atlas_panel, atlas_visible_count, board_inner, catalog_strip_rects, grimoire_layout,
+        atlas_page_size, atlas_panel, board_inner, catalog_strip_rects, grimoire_layout,
         iso_board_cells, rail_sections, scene_layout,
     };
     use crossterm::event::{
@@ -512,15 +567,11 @@ mod tests {
         let scene = scene_layout(app.viewport);
         let panel = atlas_panel(
             scene.board,
-            atlas_visible_count(
-                scene.board,
-                app.active_palette().len(),
-                app.active_state().palette_scroll,
-            ),
+            atlas_page_size(scene.board, app.active_palette().len()),
         );
         let inner = board_inner(panel);
         let palette = app.active_palette();
-        let cells = iso_board_cells(inner, palette.len(), app.active_state().palette_scroll);
+        let cells = iso_board_cells(inner, palette.len(), app.active_palette_page_start());
         let cell = cells
             .iter()
             .find(|cell| palette[cell.index] == element_index)
@@ -690,27 +741,40 @@ mod tests {
     }
 
     #[test]
-    fn inventory_scroll_clamps_within_bounds() {
+    fn page_keys_jump_between_discrete_atlas_pages() {
         let mut app = sized(100, 12);
         app.reveal_elements_for_preview(&[
             "Steam", "Mud", "Lava", "Dust", "Rain", "Stone", "Sand", "Glass",
         ]);
-        let palette_len = app.active_palette().len();
-        let capacity = app.inventory_visible_capacity();
-        let max_scroll = palette_len.saturating_sub(capacity);
-        // Scroll far down, then assert it never exceeds the maximum.
-        for _ in 0..20 {
-            app.scroll_inventory(1);
-        }
-        assert!(app.active_state().palette_scroll <= max_scroll);
-        // Scroll far up returns to the top.
-        for _ in 0..20 {
-            app.scroll_inventory(-1);
-        }
-        assert_eq!(app.active_state().palette_scroll, 0);
-        // A zero delta is a no-op.
-        app.scroll_inventory(0);
-        assert_eq!(app.active_state().palette_scroll, 0);
+        app.handle_event(key(KeyCode::Home));
+        let page_size = app.inventory_visible_capacity().max(1);
+        assert!(
+            app.active_palette().len() > page_size,
+            "fixture should need multiple atlas pages"
+        );
+
+        app.handle_event(key(KeyCode::PageDown));
+        assert_eq!(app.active_state().palette_page, 1);
+        assert_eq!(app.active_state().palette_cursor, page_size);
+
+        app.handle_event(key(KeyCode::PageUp));
+        assert_eq!(app.active_state().palette_page, 0);
+        assert_eq!(app.active_state().palette_cursor, 0);
+    }
+
+    #[test]
+    fn mouse_wheel_does_not_scroll_the_atlas_grid() {
+        let mut app = sized(100, 12);
+        app.reveal_elements_for_preview(&[
+            "Steam", "Mud", "Lava", "Dust", "Rain", "Stone", "Sand", "Glass",
+        ]);
+        app.handle_event(key(KeyCode::Home));
+        let (x, y) = board_cell_center(&app, AIR);
+
+        app.handle_event(mouse(MouseEventKind::ScrollDown, x, y));
+
+        assert_eq!(app.active_state().palette_page, 0);
+        assert_eq!(app.active_state().palette_cursor, 0);
     }
 
     #[test]
