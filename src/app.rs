@@ -80,6 +80,7 @@ impl App {
         state.banner = None;
         state.effects.clear();
         state.recent.clear();
+        state.slot_flash = [0, 0];
         state.recipe_preview = None;
         state.palette_cursor = self.catalogs[catalog_index].base_indices.len();
         state.palette_scroll = self.catalogs[catalog_index].base_indices.len();
@@ -91,6 +92,7 @@ impl App {
             self.reconcile_unlocks(index);
             self.age_banner(index);
             self.age_effects(index);
+            self.age_slot_flashes(index);
         }
     }
 
@@ -146,6 +148,7 @@ impl App {
         let should_resolve = {
             let state = self.active_state_mut();
             state.selected[slot] = Some(element_index);
+            state.slot_flash[slot] = 4;
             state.selected[0].is_some() && state.selected[1].is_some()
         };
 
@@ -290,8 +293,8 @@ impl App {
         if outputs.is_empty() {
             let state = &mut self.states[catalog_index];
             state.banner = Some(Banner::new("nothing happens", 6, None));
-            state.clear_selection();
             state.recipe_preview = None;
+            state.selected = [Some(left), Some(right)];
             return;
         }
 
@@ -304,8 +307,7 @@ impl App {
         });
 
         let state = &mut self.states[catalog_index];
-        state.clear_selection();
-
+        state.selected = [Some(left), Some(right)];
         if let Some(element_index) = maybe_new {
             self.states[catalog_index].recipe_preview = Some(RecipePreview {
                 left,
@@ -415,6 +417,12 @@ impl App {
             .effects
             .retain_mut(ElementEffect::age);
     }
+
+    fn age_slot_flashes(&mut self, catalog_index: usize) {
+        for flash in &mut self.states[catalog_index].slot_flash {
+            *flash = flash.saturating_sub(1);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -422,8 +430,8 @@ mod tests {
     use super::*;
     use crate::data::CatalogKind;
     use crate::layout::{
-        atlas_panel, atlas_visible_count, board_inner, catalog_strip_rects, iso_board_cells,
-        rail_sections, scene_layout,
+        atlas_panel, atlas_visible_count, board_inner, catalog_strip_rects, grimoire_layout,
+        iso_board_cells, rail_sections, scene_layout,
     };
     use crossterm::event::{
         Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -458,6 +466,7 @@ mod tests {
     const FIRE: usize = 2;
     const WATER: usize = 3;
     const STEAM: usize = 4;
+    const LAVA: usize = 6;
     const PRESSURE: usize = 9;
     const PLASMA: usize = 10;
 
@@ -522,6 +531,17 @@ mod tests {
         )
     }
 
+    fn workbench_slot_center(app: &App, slot: usize) -> (u16, u16) {
+        let scene = scene_layout(app.viewport);
+        let grimoire = grimoire_layout(scene.grimoire);
+        let rect = match slot {
+            0 => grimoire.slot_left,
+            1 => grimoire.slot_right,
+            _ => panic!("unsupported workbench slot index: {slot}"),
+        };
+        (rect.x + rect.width / 2, rect.y + rect.height / 2)
+    }
+
     #[test]
     fn starts_with_only_base_elements_discovered() {
         let app = app();
@@ -551,8 +571,7 @@ mod tests {
         assert_eq!(app.active_banner_highlight(), Some(STEAM));
         let preview = app.active_state().recipe_preview.expect("preview set");
         assert_eq!(preview.result, STEAM);
-        // Selection is cleared after a resolution.
-        assert_eq!(app.active_state().selected, [None, None]);
+        assert_eq!(app.active_state().selected, [Some(WATER), Some(FIRE)]);
     }
 
     #[test]
@@ -560,7 +579,7 @@ mod tests {
         let mut app = app();
         app.combine_two_elements(AIR, FIRE); // no recipe defined
         assert_eq!(app.active_banner_text(), Some("nothing happens"));
-        assert_eq!(app.active_state().selected, [None, None]);
+        assert_eq!(app.active_state().selected, [Some(AIR), Some(FIRE)]);
         assert_eq!(app.active_discovered_count(), 4);
     }
 
@@ -729,6 +748,49 @@ mod tests {
     }
 
     #[test]
+    fn successful_craft_keeps_slots_live_for_follow_up_replacement() {
+        let mut app = app();
+        app.drop_element_into_slot(WATER, 0);
+        app.drop_element_into_slot(FIRE, 1);
+        assert!(discovered(&app, STEAM));
+        assert_eq!(app.active_state().selected, [Some(WATER), Some(FIRE)]);
+        let preview = app.active_state().recipe_preview.expect("recipe preview");
+        assert_eq!(
+            (preview.left, preview.right, preview.result),
+            (WATER, FIRE, STEAM)
+        );
+    }
+
+    #[test]
+    fn dragging_earth_onto_the_left_workbench_slot_replaces_water_and_discovers_lava() {
+        let mut app = sized(100, 40);
+        app.drop_element_into_slot(WATER, 0);
+        app.drop_element_into_slot(FIRE, 1);
+        let (earth_x, earth_y) = board_cell_center(&app, EARTH);
+        let (left_x, left_y) = workbench_slot_center(&app, 0);
+
+        app.handle_event(mouse(
+            MouseEventKind::Down(MouseButton::Left),
+            earth_x,
+            earth_y,
+        ));
+        app.handle_event(mouse(
+            MouseEventKind::Drag(MouseButton::Left),
+            left_x,
+            left_y,
+        ));
+        app.handle_event(mouse(MouseEventKind::Up(MouseButton::Left), left_x, left_y));
+
+        assert_eq!(app.active_state().selected, [Some(EARTH), Some(FIRE)]);
+        assert!(discovered(&app, LAVA));
+        let preview = app.active_state().recipe_preview.expect("recipe preview");
+        assert_eq!(
+            (preview.left, preview.right, preview.result),
+            (EARTH, FIRE, LAVA)
+        );
+    }
+
+    #[test]
     fn dropping_into_an_out_of_range_slot_is_a_noop() {
         let mut app = app();
         app.drop_element_into_slot(WATER, 2);
@@ -737,15 +799,58 @@ mod tests {
     }
 
     #[test]
+    fn combined_book_is_playable_to_completion_through_app_state() {
+        let mut app = App::new();
+
+        loop {
+            let before = app.active_discovered_count();
+            app.tick();
+            let discovered: Vec<usize> = app
+                .active_state()
+                .discovered
+                .iter()
+                .enumerate()
+                .filter_map(|(index, seen)| (*seen).then_some(index))
+                .collect();
+
+            for (position, &left) in discovered.iter().enumerate() {
+                for &right in &discovered[position..] {
+                    app.combine_two_elements(left, right);
+                }
+            }
+
+            if app.active_discovered_count() == before {
+                break;
+            }
+        }
+
+        let missing: Vec<_> = app
+            .active_catalog()
+            .elements
+            .iter()
+            .enumerate()
+            .filter_map(|(index, element)| {
+                (!app.active_state().discovered[index]).then_some(element.name.as_str())
+            })
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "combined recipe book should be discoverable through app resolution, missing: {missing:?}"
+        );
+    }
+
+    #[test]
     fn reveal_for_preview_unlocks_and_resets_transient_state() {
         let mut app = sized(100, 40);
-        app.select_element_by_index(WATER); // dirties banner + selection
+        app.drop_element_into_slot(WATER, 0); // dirties selection/banner/slot flash
+        assert_ne!(app.active_state().slot_flash, [0, 0]);
         app.reveal_elements_for_preview(&["Steam", "Mud"]);
         assert!(discovered(&app, STEAM) && discovered(&app, 5));
         let state = app.active_state();
         assert_eq!(state.selected, [None, None]);
         assert!(state.banner.is_none());
         assert!(state.effects.is_empty());
+        assert_eq!(state.slot_flash, [0, 0]);
         assert!(state.recipe_preview.is_none());
     }
 

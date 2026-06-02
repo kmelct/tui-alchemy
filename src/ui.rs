@@ -898,18 +898,27 @@ fn render_grimoire(frame: &mut Frame<'_>, area: Rect, app: &App) {
     // The recipe formula on the nameplate already carries the + and = glyphs,
     // so the sockets stay clean (g.plus / g.equals reserved for future use).
     let _ = (g.plus, g.equals);
-    render_grimoire_slot(frame, g.slot_left, app, left_input);
-    render_grimoire_slot(frame, g.slot_right, app, right_input);
+    render_grimoire_slot(frame, g.slot_left, app, left_input, state.slot_flash[0]);
+    render_grimoire_slot(frame, g.slot_right, app, right_input, state.slot_flash[1]);
     render_grimoire_result(frame, g.result, app, result_index);
 }
 
-fn render_grimoire_slot(frame: &mut Frame<'_>, rect: Rect, app: &App, element: Option<usize>) {
+fn render_grimoire_slot(
+    frame: &mut Frame<'_>,
+    rect: Rect,
+    app: &App,
+    element: Option<usize>,
+    flash_ttl: u8,
+) {
     let catalog = app.active_catalog();
     if let Some(element_index) = element {
         let element = &catalog.elements[element_index];
         let is_birth = app.active_banner_highlight() == Some(element_index);
+        let is_flashing = flash_ttl > 0;
         let accent = if is_birth {
             palette_color(Ink::STAT)
+        } else if is_flashing && app.tick_counter.is_multiple_of(2) {
+            palette_color(Ink::TITLE)
         } else {
             palette_color_for_seed(element_index as u64)
         };
@@ -925,8 +934,15 @@ fn render_grimoire_slot(frame: &mut Frame<'_>, rect: Rect, app: &App, element: O
         if is_birth {
             sprite_lines = living_sprite_glint(sprite_lines, app.tick_counter, palette_color(9));
             sprite_lines = lines_with_empty_halo(sprite_lines, birth_halo_bg(&element.name));
+        } else if is_flashing {
+            sprite_lines =
+                living_sprite_glint(sprite_lines, app.tick_counter, palette_color(Ink::TITLE));
         }
-        let bed = slot_bed_for_element(&element.name, element_index, false, is_birth);
+        let bed = if is_flashing && app.tick_counter.is_multiple_of(2) {
+            Surfaces::PEDESTAL_TOP_ACTIVE
+        } else {
+            slot_bed_for_element(&element.name, element_index, false, is_birth)
+        };
         render_grimoire_plate(
             frame,
             rect,
@@ -1645,7 +1661,14 @@ fn render_line(frame: &mut Frame<'_>, area: Rect, line: Line<'static>) {
 
 #[cfg(test)]
 mod tests {
-    use super::living_sprite_glint;
+    use super::{
+        BIRTH_GLOW_BG, BIRTH_HALO_BG, birth_aura_bg, birth_halo_bg, center_block, center_line,
+        chamber_gradient, chamber_surface, crop_lines_to_height, empty_socket_lines, expand_rect,
+        fit_label, fit_label_lines, framed_header_body, framed_header_top, line_with_pixel_bg,
+        lines_with_empty_halo, living_sprite_glint, progress_bar, slot_bed_for_element,
+        split_long_label_word, trim_empty_sprite_padding, union_rect,
+    };
+    use ratatui::layout::Rect;
     use ratatui::style::{Color, Style};
     use ratatui::text::{Line, Span};
 
@@ -1676,5 +1699,181 @@ mod tests {
             max.saturating_sub(min) <= 1,
             "living glint should shimmer across the sprite body, not blink from top to bottom: {highlighted_rows:?}"
         );
+    }
+
+    #[test]
+    fn header_frames_balance_padding_around_the_title() {
+        let top = framed_header_top(vec![Span::raw("ALCHEMY")], 20);
+        let body = framed_header_body(vec![Span::raw("bench")], 20);
+        let top_text: String = top.iter().map(|span| span.content.as_ref()).collect();
+        let body_text: String = body.iter().map(|span| span.content.as_ref()).collect();
+
+        assert!(top_text.starts_with("╔◇"));
+        assert!(top_text.ends_with("◇╗"));
+        assert!(body_text.starts_with("╚∿"));
+        assert!(body_text.ends_with("∿╝"));
+        assert_eq!(top_text.chars().count(), 24);
+        assert_eq!(body_text.chars().count(), 24);
+    }
+
+    #[test]
+    fn rect_helpers_union_and_expand_within_bounds() {
+        let union = union_rect(Rect::new(4, 3, 10, 5), Rect::new(11, 1, 6, 8));
+        assert_eq!(union, Rect::new(4, 1, 13, 8));
+
+        let expanded = expand_rect(Rect::new(6, 5, 10, 4), 4, 3, Rect::new(0, 0, 18, 12));
+        assert_eq!(expanded, Rect::new(2, 2, 16, 10));
+    }
+
+    #[test]
+    fn label_fitting_prefers_readable_two_line_splits() {
+        let style = Style::default();
+        let lines = fit_label_lines("volcanic eruption", 8, style);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].spans[0].content.as_ref(), "volca");
+        assert_eq!(lines[1].spans[0].content.as_ref(), "nic erup");
+
+        let single_word = fit_label_lines("lightningbolt", 6, style);
+        assert_eq!(single_word.len(), 2);
+        assert_eq!(single_word[0].spans[0].content.as_ref(), "lightn");
+        assert_eq!(single_word[1].spans[0].content.as_ref(), "ingbol");
+    }
+
+    #[test]
+    fn progress_bar_stays_empty_until_it_has_visual_weight() {
+        assert_eq!(progress_bar(0, 10, 8), "        ");
+        assert_eq!(progress_bar(1, 10, 8), "        ");
+        assert_eq!(progress_bar(5, 10, 8), "████    ");
+        assert_eq!(progress_bar(10, 10, 8), "████████");
+    }
+
+    #[test]
+    fn slot_beds_and_birth_glows_follow_element_families() {
+        assert_eq!(birth_aura_bg("Steam"), Color::Rgb(39, 51, 65));
+        assert_eq!(birth_halo_bg("Steam"), Color::Rgb(50, 65, 82));
+        assert_eq!(birth_aura_bg("Air"), BIRTH_GLOW_BG);
+        assert_eq!(birth_halo_bg("Air"), BIRTH_HALO_BG);
+        assert_eq!(
+            slot_bed_for_element("Water", 3, false, false),
+            Color::Rgb(38, 65, 82)
+        );
+        assert_eq!(
+            slot_bed_for_element("Fire", 2, false, false),
+            Color::Rgb(86, 48, 38)
+        );
+        assert_eq!(
+            slot_bed_for_element("Steam", 4, false, false),
+            Color::Rgb(54, 57, 78)
+        );
+    }
+
+    #[test]
+    fn centered_blocks_pad_evenly_and_long_words_split_midpoint() {
+        let centered = center_block(vec![Line::from("air")], 5, 7);
+        assert_eq!(centered.len(), 5);
+        let centered_text: String = centered[2]
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert_eq!(centered_text, "  air  ");
+        assert!(centered[0].spans.is_empty());
+        assert!(centered[4].spans.is_empty());
+
+        let centered_line = center_line(Line::from("lava"), 8);
+        let centered_line_text: String = centered_line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert_eq!(centered_line_text, "  lava  ");
+        let (first, second) = split_long_label_word("lightning", 5);
+        assert_eq!((first, second), ("light".to_string(), "ning".to_string()));
+        assert_eq!(fit_label("alchemy", 4), "a...");
+    }
+
+    #[test]
+    fn sprite_trimming_and_cropping_keep_the_visual_center() {
+        let style = Style::default().fg(Color::White);
+        let sprite = vec![
+            Line::from(Span::styled("  XX  ", style)),
+            Line::from(Span::styled("  XX  ", style)),
+        ];
+        let trimmed = trim_empty_sprite_padding(sprite);
+        let trimmed_text: Vec<String> = trimmed
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect()
+            })
+            .collect();
+        assert_eq!(trimmed_text, vec![" XX ".to_string(), " XX ".to_string()]);
+
+        let cropped = crop_lines_to_height(
+            vec![
+                Line::from("A"),
+                Line::from("B"),
+                Line::from("C"),
+                Line::from("D"),
+                Line::from("E"),
+            ],
+            3,
+        );
+        let cropped_text: Vec<String> = cropped
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect()
+            })
+            .collect();
+        assert_eq!(
+            cropped_text,
+            vec!["B".to_string(), "C".to_string(), "D".to_string()]
+        );
+    }
+
+    #[test]
+    fn labels_and_empty_sockets_cover_small_caps_and_output_variants() {
+        assert_eq!(fit_label("alchemy", 0), "");
+        assert_eq!(fit_label("alchemy", 2), "al");
+
+        let input = empty_socket_lines(false);
+        let output = empty_socket_lines(true);
+        assert_eq!(input.len(), 5);
+        assert_eq!(output.len(), 5);
+        assert_ne!(input[2].spans[2].style.fg, output[2].spans[2].style.fg);
+        assert_eq!(progress_bar(3, 0, 4), "    ");
+    }
+
+    #[test]
+    fn chamber_colors_and_pixel_beds_cover_remaining_render_helpers() {
+        let ceiling = chamber_gradient(0.0);
+        let floor = chamber_gradient(1.0);
+        assert_ne!(ceiling, floor);
+        assert_ne!(chamber_surface(0.25, 0.25), chamber_surface(0.25, 0.85));
+
+        let base = Line::from(Span::styled(" x ", Style::default().fg(Color::White)));
+        let painted = line_with_pixel_bg(base, Color::Blue);
+        assert_eq!(painted.spans[1].style.bg, Some(Color::Blue));
+        assert_eq!(painted.spans[0].style.bg, None);
+
+        let halo = lines_with_empty_halo(
+            vec![
+                Line::from(Span::raw("   ")),
+                Line::from(Span::styled(" X ", Style::default().fg(Color::White))),
+                Line::from(Span::raw("   ")),
+            ],
+            Color::Red,
+        );
+        let halo_rows: Vec<Vec<Option<Color>>> = halo
+            .iter()
+            .map(|line| line.spans.iter().map(|span| span.style.bg).collect())
+            .collect();
+        assert!(halo_rows[0].contains(&Some(Color::Red)));
+        assert!(halo_rows[2].contains(&Some(Color::Red)));
     }
 }

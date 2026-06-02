@@ -262,8 +262,8 @@ pub(crate) fn atlas_panel(area: Rect, count: usize) -> Rect {
             .saturating_add((columns as u16).saturating_mul(geometry.col_stride()))
             .saturating_sub(geometry.gap_x);
         let content_h = (rows as u16).saturating_mul(geometry.row_stride());
-        let panel_w = content_w.saturating_add(2).clamp(14, area.width);
-        let panel_h = content_h.saturating_add(2).clamp(10, area.height);
+        let panel_w = content_w.saturating_add(2).clamp(1, area.width.max(1));
+        let panel_h = content_h.saturating_add(2).clamp(1, area.height.max(1));
         let x = area
             .x
             .saturating_add((area.width.saturating_sub(panel_w)) / 2);
@@ -489,6 +489,16 @@ mod tests {
             "scroll capacity should match the rendered wide-screen atlas geometry"
         );
     }
+
+    #[test]
+    fn workbench_panel_uses_the_right_column_instead_of_a_top_ribbon() {
+        let grimoire = grimoire_layout(Rect::new(0, 0, 36, 26));
+        assert!(
+            grimoire.panel.height >= 22,
+            "the workbench should occupy most of the right column so drag-and-drop does not feel stranded in a tiny ribbon"
+        );
+        assert_eq!(grimoire.panel.y, 0);
+    }
 }
 /// The recipe-table panel: a compact, bronze-rimmed bar holding three sockets
 /// laid out horizontally — `ingredient + ingredient = result`. It is centred
@@ -506,11 +516,10 @@ pub(crate) struct GrimoireLayout {
 }
 
 pub(crate) fn grimoire_layout(area: Rect) -> GrimoireLayout {
-    // Compact recipe panel: keep the device readable and vertically balanced in
-    // tall viewports instead of stretching it into a ribbon pinned to the top.
-    let panel_h = area.height.clamp(9, 14).min(area.height.max(1));
-    let panel_y = area.y;
-    let panel = Rect::new(area.x, panel_y, area.width, panel_h);
+    // The workbench is the primary first-session interaction surface, so it
+    // should own the full right column instead of collapsing into a small top
+    // ribbon with dead space underneath.
+    let panel = area;
     let inner = inset(panel, 1);
     let nameplate = Rect::new(inner.x, inner.y, inner.width, 1);
     let body = Rect::new(

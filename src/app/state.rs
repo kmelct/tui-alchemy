@@ -52,6 +52,7 @@ pub struct CatalogState {
     pub banner: Option<Banner>,
     pub effects: Vec<ElementEffect>,
     pub recipe_preview: Option<RecipePreview>,
+    pub slot_flash: [u8; 2],
 }
 
 impl CatalogState {
@@ -70,6 +71,7 @@ impl CatalogState {
             banner: None,
             effects: Vec::new(),
             recipe_preview: None,
+            slot_flash: [0, 0],
         }
     }
 
