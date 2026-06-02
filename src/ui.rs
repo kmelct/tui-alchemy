@@ -40,7 +40,6 @@ pub fn render_app(frame: &mut Frame<'_>, app: &App) {
     let stage = stage_rect(area);
     render_header(frame, stage, app);
     let scene = scene_layout(area);
-    render_workspace_shell(frame, area, scene, app);
     render_stats_rail(frame, scene.rail, app);
     render_iso_board(frame, scene.board, app);
     render_grimoire(frame, scene.grimoire, app);
@@ -274,105 +273,6 @@ fn render_panel_frame(frame: &mut Frame<'_>, area: Rect, title: &str, title_colo
         ),
         Line::from(Span::styled(base, rim)),
     );
-}
-
-fn render_workspace_shell(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    scene: crate::layout::SceneLayout,
-    app: &App,
-) {
-    if area.width < 130 || area.height < 24 {
-        return;
-    }
-
-    let state = app.active_state();
-    let visible = atlas_visible_count(
-        scene.board,
-        app.active_palette().len(),
-        state.palette_scroll,
-    );
-    let rail = rail_sections(scene.rail).panel;
-    let atlas = atlas_panel(scene.board, visible);
-    let recipe = grimoire_layout(scene.grimoire).panel;
-    let shell = expand_rect(union_rect(union_rect(rail, atlas), recipe), 2, 1, area);
-    if shell.width < 12 || shell.height < 6 {
-        return;
-    }
-
-    fill_rect_bg(frame, shell, Color::Rgb(10, 12, 20));
-    render_shell_frame(frame, shell);
-}
-
-fn render_shell_frame(frame: &mut Frame<'_>, area: Rect) {
-    if area.width < 4 || area.height < 3 {
-        return;
-    }
-    let rim = Style::default()
-        .fg(Color::Rgb(64, 49, 34))
-        .bg(Color::Rgb(10, 12, 20));
-    let title = Style::default()
-        .fg(palette_color(Ink::TITLE))
-        .bg(Color::Rgb(10, 12, 20))
-        .add_modifier(Modifier::BOLD);
-    let inner_w = area.width.saturating_sub(2);
-    render_titled_top_border(frame, area, "workshop", rim, title);
-
-    for y in area.y.saturating_add(1)..area.y.saturating_add(area.height.saturating_sub(1)) {
-        render_line(
-            frame,
-            Rect::new(area.x, y, 1, 1),
-            Line::from(Span::styled("▌", rim)),
-        );
-        render_line(
-            frame,
-            Rect::new(area.x.saturating_add(area.width.saturating_sub(1)), y, 1, 1),
-            Line::from(Span::styled("▐", rim)),
-        );
-    }
-
-    let mut base = String::with_capacity(area.width as usize);
-    base.push('▙');
-    for i in 0..inner_w {
-        base.push(if i == inner_w / 2 { '▓' } else { '▄' });
-    }
-    base.push('▟');
-    render_line(
-        frame,
-        Rect::new(
-            area.x,
-            area.y.saturating_add(area.height.saturating_sub(1)),
-            area.width,
-            1,
-        ),
-        Line::from(Span::styled(base, rim)),
-    );
-}
-
-fn union_rect(a: Rect, b: Rect) -> Rect {
-    let x0 = a.x.min(b.x);
-    let y0 = a.y.min(b.y);
-    let x1 = a.x.saturating_add(a.width).max(b.x.saturating_add(b.width));
-    let y1 =
-        a.y.saturating_add(a.height)
-            .max(b.y.saturating_add(b.height));
-    Rect::new(x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0))
-}
-
-fn expand_rect(rect: Rect, dx: u16, dy: u16, bounds: Rect) -> Rect {
-    let x0 = rect.x.saturating_sub(dx).max(bounds.x);
-    let y0 = rect.y.saturating_sub(dy).max(bounds.y);
-    let x1 = rect
-        .x
-        .saturating_add(rect.width)
-        .saturating_add(dx)
-        .min(bounds.x.saturating_add(bounds.width));
-    let y1 = rect
-        .y
-        .saturating_add(rect.height)
-        .saturating_add(dy)
-        .min(bounds.y.saturating_add(bounds.height));
-    Rect::new(x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0))
 }
 
 fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
@@ -1663,12 +1563,11 @@ fn render_line(frame: &mut Frame<'_>, area: Rect, line: Line<'static>) {
 mod tests {
     use super::{
         BIRTH_GLOW_BG, BIRTH_HALO_BG, birth_aura_bg, birth_halo_bg, center_block, center_line,
-        chamber_gradient, chamber_surface, crop_lines_to_height, empty_socket_lines, expand_rect,
-        fit_label, fit_label_lines, framed_header_body, framed_header_top, line_with_pixel_bg,
+        chamber_gradient, chamber_surface, crop_lines_to_height, empty_socket_lines, fit_label,
+        fit_label_lines, framed_header_body, framed_header_top, line_with_pixel_bg,
         lines_with_empty_halo, living_sprite_glint, progress_bar, slot_bed_for_element,
-        split_long_label_word, trim_empty_sprite_padding, union_rect,
+        split_long_label_word, trim_empty_sprite_padding,
     };
-    use ratatui::layout::Rect;
     use ratatui::style::{Color, Style};
     use ratatui::text::{Line, Span};
 
@@ -1714,15 +1613,6 @@ mod tests {
         assert!(body_text.ends_with("∿╝"));
         assert_eq!(top_text.chars().count(), 24);
         assert_eq!(body_text.chars().count(), 24);
-    }
-
-    #[test]
-    fn rect_helpers_union_and_expand_within_bounds() {
-        let union = union_rect(Rect::new(4, 3, 10, 5), Rect::new(11, 1, 6, 8));
-        assert_eq!(union, Rect::new(4, 1, 13, 8));
-
-        let expanded = expand_rect(Rect::new(6, 5, 10, 4), 4, 3, Rect::new(0, 0, 18, 12));
-        assert_eq!(expanded, Rect::new(2, 2, 16, 10));
     }
 
     #[test]

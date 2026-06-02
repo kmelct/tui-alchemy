@@ -491,11 +491,11 @@ mod tests {
     }
 
     #[test]
-    fn workbench_panel_uses_the_right_column_instead_of_a_top_ribbon() {
+    fn workbench_panel_stays_compact_in_the_right_column() {
         let grimoire = grimoire_layout(Rect::new(0, 0, 36, 26));
         assert!(
-            grimoire.panel.height >= 22,
-            "the workbench should occupy most of the right column so drag-and-drop does not feel stranded in a tiny ribbon"
+            grimoire.panel.height <= 14,
+            "the recipe table should be a compact instrument inside the right column, not a full-height sidebar"
         );
         assert_eq!(grimoire.panel.y, 0);
     }
@@ -516,10 +516,11 @@ pub(crate) struct GrimoireLayout {
 }
 
 pub(crate) fn grimoire_layout(area: Rect) -> GrimoireLayout {
-    // The workbench is the primary first-session interaction surface, so it
-    // should own the full right column instead of collapsing into a small top
-    // ribbon with dead space underneath.
-    let panel = area;
+    // Keep the recipe table as a compact instrument in the right column. The
+    // surrounding workshop shell owns the page-scale frame; this panel should
+    // not become another floor-to-ceiling sidebar.
+    let panel_h = area.height.clamp(9, 14).min(area.height.max(1));
+    let panel = Rect::new(area.x, area.y, area.width, panel_h);
     let inner = inset(panel, 1);
     let nameplate = Rect::new(inner.x, inner.y, inner.width, 1);
     let body = Rect::new(

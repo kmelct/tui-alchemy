@@ -258,6 +258,46 @@ fn seeded_preview_keeps_the_atlas_dense_while_the_workbench_stays_available() {
 }
 
 #[test]
+fn wide_workbench_does_not_become_a_full_height_sidebar() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let title = find_text_position(&lines, "recipe table").expect("expected recipe table");
+    let result = find_all_text_positions(&lines, "result")
+        .into_iter()
+        .max_by_key(|(_, row)| *row)
+        .expect("expected result label");
+
+    assert!(
+        result.1.saturating_sub(title.1) <= 14,
+        "the right recipe table should remain a compact workbench panel instead of a floor-to-ceiling sidebar:\n{}",
+        lines.join("\n")
+    );
+}
+
+#[test]
+fn wide_layout_uses_panel_borders_without_a_second_page_shell() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let text = buffer_to_text(terminal.backend().buffer());
+
+    assert!(
+        text.contains("✦ progress") && text.contains("✦ atlas") && text.contains("✦ recipe table"),
+        "wide layouts should keep the three primary fantasy panel borders visible:\n{text}"
+    );
+    assert!(
+        !text.contains("✦ workshop"),
+        "wide layouts should not wrap compact panels in a second page-scale workshop shell that creates empty left/right side compartments:\n{text}"
+    );
+}
+
+#[test]
 fn live_workbench_state_survives_dynamic_resize() {
     let mut app = App::new();
     let mut terminal = Terminal::new(TestBackend::new(100, 28)).unwrap();
