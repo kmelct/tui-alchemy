@@ -1,11 +1,11 @@
-# tui-alchemy agent instructions
+# tui-alchemy maintainer instructions
 
 ## Release workflow
 
 When preparing a full release, do not stop at documentation or tests. Complete the whole publishing lane.
 
 1. Ensure the root `README.md` is the player-facing GitHub README and references screenshots from `docs/screenshots/`.
-2. Keep release-facing docs in `docs/`; remove obsolete generated HTML or preview-only documentation.
+2. Keep release-facing docs in `docs/`; remove obsolete HTML snapshots or preview-only documentation.
 3. Update package metadata in `Cargo.toml`:
    - `version`
    - `rust-version`
@@ -32,7 +32,6 @@ When preparing a full release, do not stop at documentation or tests. Complete t
    ```sh
    cargo test
    cargo ci-clippy
-   python -m unittest tests.test_generate_pixel_sprites
    cargo package
    ```
 

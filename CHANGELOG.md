@@ -8,12 +8,12 @@ All notable changes to `tui-alchemy` are tracked here. The project follows seman
 
 - Terminal alchemy game with a 755-element combined recipe catalog.
 - Ratatui/Crossterm application loop with keyboard and mouse interaction.
-- Terminal-native pixel-art sprite renderer using generated runtime assets.
+- Terminal-native pixel-art sprite renderer using checked-in runtime assets.
 - Discovery atlas, progress rail, and three-slot recipe table workbench.
 - Deterministic screenshot harness for release and visual QA evidence.
 - Tutorial README with curated screenshots and maintenance instructions.
 - Package metadata for GitHub and crate packaging.
-- Agent release instructions in `CLAUDE.md`.
+- Release instructions in `CLAUDE.md`.
 
 ### Fixed
 
@@ -23,6 +23,5 @@ All notable changes to `tui-alchemy` are tracked here. The project follows seman
 
 - `cargo test`
 - `cargo ci-clippy`
-- `python -m unittest tests.test_generate_pixel_sprites`
 - `cargo run --example screenshot`
 - `cargo package`

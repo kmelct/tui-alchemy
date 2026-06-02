@@ -272,7 +272,6 @@ fn render_panel_frame(frame: &mut Frame<'_>, area: Rect, title: &str, title_colo
 }
 
 fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
-    let catalog = app.active_catalog();
     let discovered = app.active_discovered_count();
     let active_banner = app.active_banner_text();
     if area.width < 8 || area.height == 0 {
@@ -305,20 +304,12 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
                 .fg(palette_color(9))
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled("  ", title_style),
-        Span::styled("▣ ", title_style.fg(palette_color(11))),
-        Span::styled(
-            catalog.title(),
-            title_style
-                .fg(palette_color(11))
-                .add_modifier(Modifier::BOLD),
-        ),
     ];
 
     let status_spans = active_banner.map_or_else(
         || {
             vec![Span::styled(
-                format!("{}  crafting table workbench", catalog.title()),
+                "crafting table workbench",
                 status_style.fg(palette_color(14)),
             )]
         },

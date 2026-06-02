@@ -1,6 +1,6 @@
-<h1 align="center">Alchemy TUI 🧙‍♂️</h1>
+<h1 align="center">Alchemy TUI</h1>
 <p align="center">
-  <strong>A terminal alchemy crafting game with a 755-element recipe book, Ratatui UI, and generated pixel-art sprites.</strong>
+  <strong>A terminal alchemy crafting game with a 755-element recipe book, Ratatui UI, and pixel-art sprites.</strong>
 </p>
 
 <p align="center">
@@ -73,13 +73,13 @@ Press `q` to quit.
 
 ## How the screen works
 
-The game uses one terminal workshop split into three functional areas.
+Use it as a three-step loop: **select an element → select a second element → get a result**.
 
-| Area | What it does | Screenshot |
+| 1. Select an element | 2. Select a second | 3. Get the result |
 | --- | --- | --- |
-| Progress and recipe book | Shows discovery progress, readiness, and the known recipe list. | <img alt="Progress rail and starter atlas" src="docs/screenshots/01-initial.png" width="320"> |
-| Atlas | Shows discovered elements. Cards are selectable ingredients with terminal-native pixel art. | <img alt="Populated atlas with discovered elements" src="docs/screenshots/04-populated-board.png" width="320"> |
-| Recipe table | Holds `ingredient + ingredient = result`; valid pairs unlock the result. | <img alt="Water and Fire combined into Steam" src="docs/screenshots/02-created-steam.png" width="320"> |
+| <img alt="Starter atlas with Air, Earth, Fire, and Water" src="docs/screenshots/01-initial.png" width="300"> | <img alt="Dragging an ingredient toward the workbench" src="docs/screenshots/03-drag-ghost.png" width="300"> | <img alt="Water and Fire resolve into Steam" src="docs/screenshots/02-created-steam.png" width="300"> |
+
+The left rail tracks progress, the center atlas holds discovered ingredients, and the right workbench resolves `ingredient + ingredient = result`.
 
 ## How to play
 
@@ -158,12 +158,11 @@ Additional layout captures:
 
 ```text
 src/                    Rust application, renderer, layout, catalog, and sprite code
-assets/pixel-sprites/   Generated runtime pixel-art sprite atlas and manifest
+assets/pixel-sprites/   Runtime pixel-art sprite atlas and manifest
 data/little_alchemy.json
                         Canonical 755-element recipe catalog
 docs/screenshots/       Curated screenshots used by this README and release notes
-tests/                  Gameplay, layout, rendering, and sprite-pipeline tests
-tools/                  Sprite generation and preview tooling
+tests/                  Gameplay, layout, rendering, and regression tests
 ```
 
 ## Maintain the project
@@ -177,13 +176,9 @@ cargo test
 cargo ci-clippy
 ```
 
-### Sprite generation
+### Runtime sprites
 
-Run this after changing sprite tooling, generated sprite assets, or sprite manifest semantics:
-
-```sh
-python -m unittest tests.test_generate_pixel_sprites
-```
+Runtime sprites are checked in under `assets/pixel-sprites/`. Treat them as release assets unless a dedicated sprite workflow is added back to the project.
 
 ### Screenshot refresh
 
@@ -212,10 +207,9 @@ cargo package
 4. Copy curated screenshots into `docs/screenshots/`.
 5. Run `cargo test`.
 6. Run `cargo ci-clippy`.
-7. Run `python -m unittest tests.test_generate_pixel_sprites`.
-8. Run `cargo package`.
-9. Commit the release changes.
-10. Tag the release commit, push it, and create the GitHub release from `docs/release-v0.1.0.md`.
+7. Run `cargo package`.
+8. Commit the release changes.
+9. Tag the release commit, push it, and create the GitHub release from `docs/release-v0.1.0.md`.
 
 ## License
 

@@ -258,6 +258,25 @@ fn seeded_preview_keeps_the_atlas_dense_while_the_workbench_stays_available() {
 }
 
 #[test]
+fn header_mentions_game_title_once() {
+    let backend = TestBackend::new(100, 28);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let header = lines[0].to_ascii_lowercase();
+    let title_mentions = header.matches("little alchemy").count();
+
+    assert_eq!(
+        title_mentions,
+        1,
+        "top header should not repeat the game title:\n{}",
+        lines.join("\n")
+    );
+}
+
+#[test]
 fn wide_workbench_does_not_become_a_full_height_sidebar() {
     let backend = TestBackend::new(160, 50);
     let mut terminal = Terminal::new(backend).unwrap();

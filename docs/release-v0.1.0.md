@@ -2,7 +2,7 @@
 
 ## Summary
 
-`tui-alchemy` is ready for its first GitHub release: a terminal alchemy crafting game with a Ratatui UI, generated pixel-art sprites, mouse and keyboard controls, and a 755-element recipe catalog.
+`tui-alchemy` is ready for its first GitHub release: a terminal alchemy crafting game with a Ratatui UI, pixel-art sprites, mouse and keyboard controls, and a 755-element recipe catalog.
 
 ## Highlights
 
@@ -47,7 +47,6 @@ Run these commands from the repository root:
 ```sh
 cargo test
 cargo ci-clippy
-python -m unittest tests.test_generate_pixel_sprites
 cargo run --example screenshot
 cargo package
 ```

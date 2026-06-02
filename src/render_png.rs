@@ -1,5 +1,5 @@
 //! Render a ratatui [`Buffer`] to an RGBA raster so the terminal UI can be
-//! captured as a PNG and inspected visually (by a human or an agent).
+//! captured as a PNG and inspected visually during release checks.
 //!
 //! The game draws sprites entirely with Unicode *block glyphs* (`▀▄▌▐▙▟…`), so
 //! we reproduce them faithfully without any font: each block glyph maps to the

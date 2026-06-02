@@ -23,8 +23,6 @@ include = [
     "/docs/**",
     "/examples/*.rs",
     "/tests/*.rs",
-    "/tests/*.py",
-    "/tools/*.py",
     "/src/**",
 ]
 
