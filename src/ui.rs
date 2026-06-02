@@ -379,17 +379,19 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
     }
 
     let title_style = Style::default().bg(HUD_BG);
+    let status_style = Style::default().bg(HUD_SHADOW);
+
+    let logo_top = vec![Span::styled(
+        "▛▀TUI▀▜",
+        title_style
+            .fg(palette_color(14))
+            .add_modifier(Modifier::BOLD),
+    )];
+    let logo_bottom = vec![Span::styled("▙▄▄✦▄▄▟", status_style.fg(palette_color(5)))];
+
     let title_spans = vec![
-        Span::styled("✦ ", title_style.fg(palette_color(5))),
         Span::styled(
-            "TUI",
-            title_style
-                .fg(palette_color(14))
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" ✦  ", title_style.fg(palette_color(5))),
-        Span::styled(
-            "little alchemy",
+            "LITTLE ALCHEMY",
             title_style
                 .fg(palette_color(10))
                 .add_modifier(Modifier::BOLD),
@@ -410,7 +412,6 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
         ),
     ];
 
-    let status_style = Style::default().bg(HUD_SHADOW);
     let status_spans = if let Some(text) = active_banner {
         vec![
             Span::styled("✦ ", status_style.fg(palette_color(1))),
@@ -428,31 +429,29 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
         )]
     };
 
-    let desired_inner = span_width(&title_spans)
+    let plaque_inner = span_width(&title_spans)
         .max(span_width(&status_spans))
         .saturating_add(4);
-    let plaque_inner = area.width.saturating_sub(2).min(desired_inner.max(8));
-    let plaque_width = plaque_inner.saturating_add(2).min(area.width);
-    let plaque_x = area
-        .x
-        .saturating_add((area.width.saturating_sub(plaque_width)) / 2);
 
-    let top_line = framed_header_top(title_spans, plaque_inner);
-    render_line(
-        frame,
-        Rect::new(plaque_x, area.y, plaque_width, 1),
-        Line::from(top_line),
-    );
+    let mut top_row = logo_top;
+    top_row.push(Span::styled("  ", title_style));
+    top_row.extend(framed_header_top(title_spans, plaque_inner));
+    let top_line = center_line(Line::from(top_row), area.width);
+    render_line(frame, Rect::new(area.x, area.y, area.width, 1), top_line);
 
     if area.height > 1 {
-        let body_line = framed_header_body(status_spans, plaque_inner);
+        let mut body_row = logo_bottom;
+        body_row.push(Span::styled("  ", status_style));
+        body_row.extend(framed_header_body(status_spans, plaque_inner));
+        let body_line = center_line(Line::from(body_row), area.width);
         render_line(
             frame,
-            Rect::new(plaque_x, area.y + 1, plaque_width, 1),
-            Line::from(body_line),
+            Rect::new(area.x, area.y + 1, area.width, 1),
+            body_line,
         );
     }
 }
+
 
 fn span_width(spans: &[Span<'static>]) -> u16 {
     spans.iter().map(|span| span.content.chars().count()).sum::<usize>() as u16

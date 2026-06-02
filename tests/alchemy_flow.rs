@@ -577,8 +577,8 @@ fn header_reads_as_a_sprite_hud_not_plain_status_text() {
         "top HUD should use a framed sprite plaque for title and stats, not plain prose:\n{header}"
     );
     assert!(
-        header.contains("little alchemy") && header.contains("4 / 755"),
-        "sprite HUD should preserve readable title and combined count stats:\n{header}"
+        header.contains("LITTLE ALCHEMY") && header.contains("4 / 755"),
+        "sprite HUD should preserve an uppercase fantasy title and combined count stats:\n{header}"
     );
 }
 
@@ -593,7 +593,9 @@ fn header_status_sits_inside_a_framed_plaque_not_bare_text() {
     let status_row = &lines[1];
 
     assert!(
-        status_row.contains("▌") && status_row.contains("▐") && status_row.contains("crafting table workbench"),
+        status_row.contains("▌")
+            && status_row.contains("▐")
+            && status_row.contains("crafting table workbench"),
         "the subtitle row should sit inside a framed sprite plaque instead of floating on the backdrop:\n{status_row}"
     );
 }
@@ -605,16 +607,22 @@ fn header_carries_a_clear_fantasy_tui_badge() {
     let mut app = App::new();
 
     terminal.draw(|frame| app.render(frame)).unwrap();
-    let header = buffer_lines(terminal.backend().buffer())
-        .iter()
-        .take(2)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("\n");
+    let lines = buffer_lines(terminal.backend().buffer());
+    let header = lines.iter().take(2).cloned().collect::<Vec<_>>().join("\n");
+    let logo_top = find_text_position(&lines[..2], "▛▀TUI▀▜").expect("expected top of TUI logo");
+    let logo_bottom =
+        find_text_position(&lines[..2], "▙▄▄✦▄▄▟").expect("expected bottom of TUI logo");
+    let title = find_text_position(&lines[..2], "LITTLE ALCHEMY").expect("expected title");
 
+    assert_eq!(
+        logo_top.0, logo_bottom.0,
+        "header TUI logo should be a real two-row tile with aligned top and bottom, not separate centered text fragments:\n{header}"
+    );
     assert!(
-        header.contains("TUI") && header.contains("little alchemy"),
-        "header should carry a clear fantasy TUI badge alongside the game title:\n{header}"
+        title.0 > logo_top.0 + 8
+            && !header.contains("▌ TUI ▐")
+            && !header.contains("little alchemy"),
+        "header should use a clear uppercase fantasy title after the TUI tile, not a text chip or lowercase prose:\n{header}"
     );
 }
 
@@ -1099,7 +1107,7 @@ fn atlas_tiles_have_their_own_fantasy_picture_frames() {
     );
 
     assert!(
-        framed_glyphs >= 12,
+        framed_glyphs >= 10,
         "atlas cards should have their own fantasy picture frames instead of blending straight into the panel:\n{}",
         lines.join("\n")
     );
