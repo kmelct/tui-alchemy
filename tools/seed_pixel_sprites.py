@@ -531,42 +531,36 @@ SEED_ELEMENT_SLUGS = [
 
 def main() -> int:
     entries = []
-    for folder, catalog, data_file, source_ext in [
-        ("little-alchemy-1", "la1", "little_alchemy_wiki.json", "png"),
-        ("little-alchemy-2", "la2", "little_alchemy_2.json", "svg"),
-    ]:
-        for slug, label in catalog_seed_jobs(data_file):
-            path = OUT / folder / f"{slug}.png"
-            source_icon = Path("assets") / "icons" / folder / f"{slug}.{source_ext}"
-            pixels = source_icon_pixels(ROOT / source_icon) if slug not in SEED_ELEMENT_SLUGS else None
-            if pixels is None:
-                pixels = make_sprite(slug)
-            write_png(path, pixels)
+    for slug, label, sprite_path, source_icon in catalog_seed_jobs():
+        path = ROOT / sprite_path
+        pixels = source_icon_pixels(ROOT / source_icon) if source_icon and slug not in SEED_ELEMENT_SLUGS else None
+        if pixels is None:
+            pixels = make_sprite(slug)
+        write_png(path, pixels)
+        entries.append(
+            manifest_entry(
+                "catalog",
+                slug,
+                label,
+                path,
+                source_icon,
+            )
+        )
+        for frame in range(1, 4):
+            frame_path = path.with_name(f"{slug}_idle_{frame}.png")
+            write_png(frame_path, animate_idle(slug, pixels, frame))
             entries.append(
                 manifest_entry(
-                    catalog,
-                    slug,
-                    label,
-                    path,
+                    "catalog",
+                    f"{slug}_idle_{frame}",
+                    f"{label} idle {frame}",
+                    frame_path,
                     source_icon,
                 )
             )
-            for frame in range(1, 4):
-                frame_path = OUT / folder / f"{slug}_idle_{frame}.png"
-                write_png(frame_path, animate_idle(slug, pixels, frame))
-                entries.append(
-                    manifest_entry(
-                        catalog,
-                        f"{slug}_idle_{frame}",
-                        f"{label} idle {frame}",
-                        frame_path,
-                        source_icon,
-                    )
-                )
 
     for slug, label in [
-        ("catalog-la1", "Little Alchemy 1"),
-        ("catalog-la2", "Little Alchemy 2"),
+        ("catalog", "Little Alchemy"),
         ("combine", "Mix"),
         ("clear", "Clear"),
         ("reset", "Reset"),
@@ -584,15 +578,23 @@ def main() -> int:
     (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return 0
 
-def catalog_seed_jobs(data_file):
-    data = json.loads((ROOT / "data" / data_file).read_text())
+def catalog_seed_jobs():
+    data = json.loads((ROOT / "data" / "little_alchemy.json").read_text())
     seen = set()
     for element in data["elements"]:
         slug = slugify(element.get("slug") or element["name"])
         if slug in seen:
             continue
         seen.add(slug)
-        yield slug, element["name"]
+        sprite_path = Path(element["sprite"])
+        yield slug, element["name"], sprite_path, source_icon_for_sprite(sprite_path, slug)
+
+
+def source_icon_for_sprite(sprite_path, slug):
+    folder = sprite_path.parent.name
+    extension = "svg" if folder.endswith("-2") else "png"
+    candidate = Path("assets") / "icons" / folder / f"{slug}.{extension}"
+    return candidate if (ROOT / candidate).exists() else None
 
 
 def slugify(value):
@@ -4080,9 +4082,9 @@ def make_sprite(slug):
         line(p, 10, 14, 22, 14, "sky", 1)
         line(p, 10, 18, 8, 25, "sky", 1)
         line(p, 22, 18, 25, 25, "sky", 1)
-    elif slug in {"catalog-la1", "catalog-la2"}:
-        cover = "blue" if slug.endswith("la1") else "violet"
-        trim = "sky" if slug.endswith("la1") else "gold"
+    elif slug == "catalog":
+        cover = "blue"
+        trim = "gold"
         polygon(p, [(5, 9), (14, 7), (14, 26), (5, 23)], cover)
         polygon(p, [(18, 7), (27, 9), (27, 23), (18, 26)], cover)
         polygon(p, [(7, 10), (14, 9), (14, 23), (7, 22)], "paper")

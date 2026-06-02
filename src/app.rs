@@ -47,9 +47,13 @@ impl App {
     }
 
     pub fn render(&mut self, frame: &mut Frame<'_>) {
-        self.viewport = frame.area();
-        self.sync_active_palette_page_to_cursor();
+        self.set_viewport(frame.area());
         ui::render_app(frame, self);
+    }
+
+    pub(crate) fn set_viewport(&mut self, viewport: Rect) {
+        self.viewport = viewport;
+        self.sync_active_palette_page_to_cursor();
     }
 
     #[doc(hidden)]
@@ -86,6 +90,24 @@ impl App {
         state.recipe_preview = None;
         state.palette_cursor = self.catalogs[catalog_index].base_indices.len();
         state.palette_page = 0;
+    }
+
+    #[doc(hidden)]
+    pub fn preview_drag_element(&mut self, name: &str, column: u16, row: u16) {
+        let catalog_index = self.active_catalog;
+        let Some(&element_index) = self.catalogs[catalog_index]
+            .name_to_index
+            .get(&normalize(name))
+        else {
+            return;
+        };
+
+        self.states[catalog_index].drag = Some(DragState {
+            element_index,
+            origin: DragOrigin::Inventory,
+            column,
+            row,
+        });
     }
 
     pub fn tick(&mut self) {
@@ -483,10 +505,8 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::CatalogKind;
     use crate::layout::{
-        atlas_page_size, atlas_panel, board_inner, catalog_strip_rects, grimoire_layout,
-        iso_board_cells, rail_sections, scene_layout,
+        atlas_page_size, atlas_panel, board_inner, grimoire_layout, iso_board_cells, scene_layout,
     };
     use crossterm::event::{
         Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -526,17 +546,7 @@ mod tests {
     const PLASMA: usize = 10;
 
     fn app() -> App {
-        App::with_catalogs(vec![GameCatalog::from_raw_json(
-            CatalogKind::LittleAlchemy1,
-            TEST_JSON,
-        )])
-    }
-
-    fn app_two() -> App {
-        App::with_catalogs(vec![
-            GameCatalog::from_raw_json(CatalogKind::LittleAlchemy1, TEST_JSON),
-            GameCatalog::from_raw_json(CatalogKind::LittleAlchemy2, TEST_JSON),
-        ])
+        App::with_catalogs(vec![GameCatalog::from_raw_json(TEST_JSON)])
     }
 
     fn sized(width: u16, height: u16) -> App {
@@ -696,21 +706,32 @@ mod tests {
     }
 
     #[test]
-    fn tab_keys_do_not_change_the_single_recipe_book() {
-        let mut app = app_two();
-        assert_eq!(app.active_catalog, 0);
-        app.handle_event(key(KeyCode::Tab));
-        assert_eq!(app.active_catalog, 0);
-        app.handle_event(key(KeyCode::BackTab));
-        assert_eq!(app.active_catalog, 0);
-    }
-
-    #[test]
     fn digit_key_selects_the_matching_visible_slot() {
         let mut app = sized(100, 40);
         app.handle_event(key(KeyCode::Char('1')));
         assert_eq!(app.active_state().selected, [Some(AIR), None]);
         assert_eq!(app.active_banner_text(), Some("selected Air"));
+    }
+
+    #[test]
+    fn preview_drag_helper_sets_drag_for_named_element() {
+        let mut app = app();
+
+        app.preview_drag_element("Water", 10, 11);
+
+        let drag = app.active_drag().expect("preview drag should be active");
+        assert_eq!(drag.element_index, WATER);
+        assert_eq!(drag.column, 10);
+        assert_eq!(drag.row, 11);
+    }
+
+    #[test]
+    fn resize_event_updates_the_cached_viewport_before_next_draw() {
+        let mut app = sized(100, 40);
+
+        app.handle_event(Event::Resize(64, 24));
+
+        assert_eq!(app.viewport, Rect::new(0, 0, 64, 24));
     }
 
     #[test]
@@ -916,22 +937,6 @@ mod tests {
         assert!(state.effects.is_empty());
         assert_eq!(state.slot_flash, [0, 0]);
         assert!(state.recipe_preview.is_none());
-    }
-
-    #[test]
-    fn clicking_a_recipe_book_tile_does_not_switch_catalogs() {
-        let mut app = app_two();
-        app.viewport = Rect::new(0, 0, 100, 40);
-        let scene = scene_layout(app.viewport);
-        let strip = rail_sections(scene.rail).catalog_strip;
-        let rects = catalog_strip_rects(strip, app.catalogs.len());
-        let (_, tile) = rects
-            .iter()
-            .find(|(index, _)| *index == 1)
-            .expect("second fixture tile");
-        let (x, y) = (tile.x + tile.width / 2, tile.y + tile.height / 2);
-        app.handle_event(mouse(MouseEventKind::Down(MouseButton::Left), x, y));
-        assert_eq!(app.active_catalog, 0);
     }
 
     #[test]

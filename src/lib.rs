@@ -1,3 +1,4 @@
+pub mod about;
 pub mod app;
 pub mod data;
 pub mod effects;
@@ -9,4 +10,3 @@ pub mod theme;
 pub mod ui;
 
 pub use app::App;
-pub use data::CatalogKind;

@@ -521,7 +521,7 @@ fn render_catalog_strip(frame: &mut Frame<'_>, strip: Rect, app: &App) {
     if let Some((_, rect)) = rects.first().copied() {
         let accent = palette_color(Ink::STAT);
         let mut lines = sprite_lines_for_path_with_size(
-            std::path::Path::new("assets/pixel-sprites/ui/catalog-la1.png"),
+            std::path::Path::new("assets/pixel-sprites/ui/catalog.png"),
             "Book",
             6,
             6,
@@ -674,7 +674,6 @@ fn render_iso_board(frame: &mut Frame<'_>, area: Rect, app: &App) {
         }
         .sprite_size();
         let mut sprite_lines = sprite_lines_for_element_frame(
-            catalog.kind,
             element,
             sprite_size.width,
             sprite_size.height,
@@ -871,7 +870,6 @@ fn render_grimoire_slot(
         };
         let sprite_size = SpriteRole::IngredientSlot.sprite_size();
         let mut sprite_lines = sprite_lines_for_element_frame(
-            catalog.kind,
             element,
             sprite_size.width,
             sprite_size.height,
@@ -922,7 +920,6 @@ fn render_grimoire_result(frame: &mut Frame<'_>, rect: Rect, app: &App, element:
         let accent = palette_color(Ink::STAT);
         let sprite_size = SpriteRole::ResultSlot.sprite_size();
         let mut sprite_lines = sprite_lines_for_element_frame(
-            catalog.kind,
             element,
             sprite_size.width,
             sprite_size.height,
@@ -1226,7 +1223,6 @@ fn render_drag_overlay(
     let mut lines = Vec::new();
     let sprite_size = SpriteRole::DragGhost.sprite_size();
     lines.extend(sprite_lines_for_element_frame(
-        catalog.kind,
         element,
         sprite_size.width,
         sprite_size.height,

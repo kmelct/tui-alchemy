@@ -1,10 +1,9 @@
-use crate::data::{CatalogKind, ElementEntry, slugify};
+use crate::data::{ElementEntry, slugify};
 use crate::effects::ElementStyle;
-use image::{ImageBuffer, RgbaImage, imageops::FilterType};
+use image::{RgbaImage, imageops::FilterType};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
@@ -26,8 +25,8 @@ pub enum SpriteSource {
     NamedPlaceholder,
 }
 
-pub fn sprite_lines_for_element(kind: CatalogKind, element: &ElementEntry) -> Vec<Line<'static>> {
-    sprite_lines_for_element_with_size(kind, element, SPRITE_WIDTH, SPRITE_HEIGHT)
+pub fn sprite_lines_for_element(element: &ElementEntry) -> Vec<Line<'static>> {
+    sprite_lines_for_element_with_size(element, SPRITE_WIDTH, SPRITE_HEIGHT)
 }
 
 pub fn sprite_lines_for_path(path: &Path, fallback_name: &str) -> Vec<Line<'static>> {
@@ -35,22 +34,20 @@ pub fn sprite_lines_for_path(path: &Path, fallback_name: &str) -> Vec<Line<'stat
 }
 
 pub fn sprite_lines_for_element_with_size(
-    kind: CatalogKind,
     element: &ElementEntry,
     width: u32,
     height: u32,
 ) -> Vec<Line<'static>> {
-    sprite_lines_for_element_frame(kind, element, width, height, 0)
+    sprite_lines_for_element_frame(element, width, height, 0)
 }
 
 pub fn sprite_lines_for_element_frame(
-    kind: CatalogKind,
     element: &ElementEntry,
     width: u32,
     height: u32,
     tick: u64,
 ) -> Vec<Line<'static>> {
-    match sprite_source_for_element(kind, element) {
+    match sprite_source_for_element(element) {
         SpriteSource::Generated(path) => {
             let frame_path = animated_frame_path(&path, tick).unwrap_or(path);
             load_sprite(&frame_path, width, height)
@@ -60,7 +57,7 @@ pub fn sprite_lines_for_element_frame(
     }
 }
 
-pub fn sprite_source_for_element(_kind: CatalogKind, element: &ElementEntry) -> SpriteSource {
+pub fn sprite_source_for_element(element: &ElementEntry) -> SpriteSource {
     if element.pixel_sprite_path.exists() {
         SpriteSource::Generated(element.pixel_sprite_path.clone())
     } else {
@@ -120,15 +117,6 @@ fn load_raster_image(path: &Path) -> Option<RgbaImage> {
 
     match extension.as_str() {
         "png" | "jpg" | "jpeg" | "webp" => image::open(path).ok().map(|image| image.to_rgba8()),
-        "svg" => {
-            let data = fs::read(path).ok()?;
-            let options = usvg::Options::default();
-            let tree = usvg::Tree::from_data(&data, &options).ok()?;
-            let size = tree.size().to_int_size();
-            let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height())?;
-            resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
-            ImageBuffer::from_raw(size.width(), size.height(), pixmap.data().to_vec())
-        }
         _ => None,
     }
 }
@@ -484,7 +472,7 @@ fn fxhash(value: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::{CatalogKind, GameCatalog};
+    use crate::data::GameCatalog;
     use image::{Rgba, RgbaImage};
     use std::path::Path;
 
@@ -545,7 +533,7 @@ mod tests {
             "total": 1,
             "elements": [{"name": "Zzz Unmapped", "base": true}]
         }"#;
-        GameCatalog::from_raw_json(CatalogKind::LittleAlchemy1, JSON)
+        GameCatalog::from_raw_json(JSON)
     }
 
     #[test]
@@ -553,10 +541,10 @@ mod tests {
         let catalog = placeholder_catalog();
         let element = &catalog.elements[0];
         assert!(matches!(
-            sprite_source_for_element(catalog.kind, element),
+            sprite_source_for_element(element),
             SpriteSource::NamedPlaceholder
         ));
-        let lines = sprite_lines_for_element_frame(catalog.kind, element, 8, 10, 0);
+        let lines = sprite_lines_for_element_frame(element, 8, 10, 0);
         assert!(!lines.is_empty(), "placeholder must still draw something");
         // An 8×10 sprite collapses to 5 quadrant rows (2px tall each).
         assert_eq!(lines.len(), 5);
@@ -566,8 +554,8 @@ mod tests {
     fn placeholder_is_deterministic_for_a_fixed_tick() {
         let catalog = placeholder_catalog();
         let element = &catalog.elements[0];
-        let a = sprite_lines_for_element_frame(catalog.kind, element, 8, 10, 3);
-        let b = sprite_lines_for_element_frame(catalog.kind, element, 8, 10, 3);
+        let a = sprite_lines_for_element_frame(element, 8, 10, 3);
+        let b = sprite_lines_for_element_frame(element, 8, 10, 3);
         assert_eq!(text_of(&a), text_of(&b));
     }
 
@@ -575,8 +563,8 @@ mod tests {
     fn taller_sprites_produce_more_rows() {
         let catalog = placeholder_catalog();
         let element = &catalog.elements[0];
-        let short = sprite_lines_for_element_frame(catalog.kind, element, 8, 10, 0);
-        let tall = sprite_lines_for_element_frame(catalog.kind, element, 8, 20, 0);
+        let short = sprite_lines_for_element_frame(element, 8, 10, 0);
+        let tall = sprite_lines_for_element_frame(element, 8, 20, 0);
         assert!(tall.len() > short.len());
     }
 

@@ -1,7 +1,3 @@
-#[path = "data/kind.rs"]
-mod kind;
-
-pub use kind::CatalogKind;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -26,6 +22,8 @@ pub struct RawElement {
     pub hidden: bool,
     #[serde(default)]
     pub recipes: Vec<[String; 2]>,
+    #[serde(default)]
+    pub sprite: Option<PathBuf>,
     #[serde(default)]
     pub unlock: Option<RawUnlock>,
 }
@@ -53,7 +51,6 @@ pub struct ElementEntry {
     pub hidden: bool,
     pub recipes: Vec<[String; 2]>,
     pub unlock: UnlockRule,
-    pub icon_path: PathBuf,
     pub pixel_sprite_path: PathBuf,
 }
 
@@ -65,7 +62,6 @@ struct RecipeKey {
 
 #[derive(Debug, Clone)]
 pub struct GameCatalog {
-    pub kind: CatalogKind,
     pub source: String,
     pub total: usize,
     pub elements: Vec<ElementEntry>,
@@ -76,106 +72,21 @@ pub struct GameCatalog {
 }
 
 impl GameCatalog {
-    pub fn load_all() -> Vec<Self> {
-        vec![
-            Self::from_raw(
-                CatalogKind::LittleAlchemy1,
-                include_str!("../data/little_alchemy_wiki.json"),
-            ),
-            Self::from_raw(
-                CatalogKind::LittleAlchemy2,
-                include_str!("../data/little_alchemy_2.json"),
-            ),
-        ]
-    }
-
-    pub fn load_combined_book() -> Self {
-        let source_catalogs = [
-            Self::from_raw(
-                CatalogKind::LittleAlchemy1,
-                include_str!("../data/little_alchemy_wiki.json"),
-            ),
-            Self::from_raw(
-                CatalogKind::LittleAlchemy2,
-                include_str!("../data/little_alchemy_2.json"),
-            ),
-        ];
-        Self::combine_sources(source_catalogs)
+    pub fn load() -> Self {
+        Self::from_raw_json(include_str!("../data/little_alchemy.json"))
     }
 
     pub fn load_playable_books() -> Vec<Self> {
-        vec![Self::load_combined_book()]
+        vec![Self::load()]
     }
 
-    fn combine_sources<const N: usize>(sources: [Self; N]) -> Self {
-        let mut elements: Vec<ElementEntry> = Vec::new();
-        let mut name_to_index: HashMap<String, usize> = HashMap::new();
-
-        for source in sources {
-            for element in source.elements {
-                let normalized = normalize(&element.name);
-                if let Some(&index) = name_to_index.get(&normalized) {
-                    let existing = &mut elements[index];
-                    existing.base |= element.base;
-                    existing.is_final |= element.is_final;
-                    existing.hidden |= element.hidden;
-                    existing.unlock = merge_unlock_rules(&existing.unlock, &element.unlock);
-                    if !existing.pixel_sprite_path.exists() && element.pixel_sprite_path.exists() {
-                        existing.pixel_sprite_path = element.pixel_sprite_path.clone();
-                    }
-                    if !existing.icon_path.exists() && element.icon_path.exists() {
-                        existing.icon_path = element.icon_path.clone();
-                    }
-                    for recipe in element.recipes {
-                        push_unique_recipe(&mut existing.recipes, recipe);
-                    }
-                } else {
-                    let index = elements.len();
-                    name_to_index.insert(normalized, index);
-                    elements.push(element);
-                }
-            }
-        }
-
-        let mut recipe_index: HashMap<RecipeKey, Vec<usize>> = HashMap::new();
-        let mut base_indices = Vec::new();
-        let mut count_unlocks = Vec::new();
-        for (index, element) in elements.iter().enumerate() {
-            if element.base {
-                base_indices.push(index);
-            }
-            if let UnlockRule::DiscoveredCount(minimum) = element.unlock {
-                count_unlocks.push((index, minimum));
-            }
-            for recipe in &element.recipes {
-                let key = RecipeKey::from_pair(&recipe[0], &recipe[1]);
-                let outputs = recipe_index.entry(key).or_default();
-                if !outputs.contains(&index) {
-                    outputs.push(index);
-                }
-            }
-        }
-        count_unlocks.sort_by_key(|(_, minimum)| *minimum);
-
-        Self {
-            kind: CatalogKind::Combined,
-            source: "little-alchemy-combined".to_string(),
-            total: elements.len(),
-            elements,
-            recipe_index,
-            base_indices,
-            count_unlocks,
-            name_to_index,
-        }
+    pub fn from_raw_json(raw_json: &str) -> Self {
+        Self::from_raw(raw_json)
     }
 
-    pub fn from_raw_json(kind: CatalogKind, raw_json: &str) -> Self {
-        Self::from_raw(kind, raw_json)
-    }
-
-    fn from_raw(kind: CatalogKind, raw_json: &str) -> Self {
+    fn from_raw(raw_json: &str) -> Self {
         let raw: RawCatalog = serde_json::from_str(raw_json)
-            .unwrap_or_else(|error| panic!("failed to parse {}: {error}", kind.title()));
+            .unwrap_or_else(|error| panic!("failed to parse canonical catalog: {error}"));
 
         let mut elements = Vec::with_capacity(raw.elements.len());
         let mut recipe_index: HashMap<RecipeKey, Vec<usize>> = HashMap::new();
@@ -189,13 +100,9 @@ impl GameCatalog {
             } else {
                 slugify(&raw_element.slug)
             };
-            let icon_path = PathBuf::from(kind.asset_dir()).join(format!(
-                "{}.{}",
-                slug,
-                kind.asset_extension()
-            ));
-            let pixel_sprite_path =
-                PathBuf::from(kind.pixel_sprite_dir()).join(format!("{slug}.png"));
+            let pixel_sprite_path = raw_element.sprite.unwrap_or_else(|| {
+                PathBuf::from("assets/pixel-sprites").join(format!("{slug}.png"))
+            });
             let unlock = match raw_element.unlock {
                 Some(rule) if rule.kind == "discovered_count" => {
                     UnlockRule::DiscoveredCount(rule.minimum)
@@ -225,7 +132,6 @@ impl GameCatalog {
                 hidden: raw_element.hidden,
                 recipes: raw_element.recipes,
                 unlock,
-                icon_path,
                 pixel_sprite_path,
             });
         }
@@ -233,7 +139,6 @@ impl GameCatalog {
         count_unlocks.sort_by_key(|(_, minimum)| *minimum);
 
         Self {
-            kind,
             source: raw.source,
             total: raw.total,
             elements,
@@ -245,7 +150,7 @@ impl GameCatalog {
     }
 
     pub const fn title(&self) -> &'static str {
-        self.kind.title()
+        "Little Alchemy"
     }
 
     pub fn canonical_name(&self, index: usize) -> &str {
@@ -304,26 +209,6 @@ impl RecipeKey {
                 left: right,
                 right: left,
             }
-        }
-    }
-}
-
-fn push_unique_recipe(recipes: &mut Vec<[String; 2]>, recipe: [String; 2]) {
-    let incoming = RecipeKey::from_pair(&recipe[0], &recipe[1]);
-    if recipes
-        .iter()
-        .any(|existing| RecipeKey::from_pair(&existing[0], &existing[1]) == incoming)
-    {
-        return;
-    }
-    recipes.push(recipe);
-}
-
-fn merge_unlock_rules(left: &UnlockRule, right: &UnlockRule) -> UnlockRule {
-    match (left, right) {
-        (UnlockRule::None, _) | (_, UnlockRule::None) => UnlockRule::None,
-        (UnlockRule::DiscoveredCount(a), UnlockRule::DiscoveredCount(b)) => {
-            UnlockRule::DiscoveredCount((*a).min(*b))
         }
     }
 }
@@ -397,15 +282,6 @@ pub fn active_palette_indices(catalog: &GameCatalog, discovered: &[bool]) -> Vec
     catalog.visible_indices(discovered)
 }
 
-pub fn icon_path_for(kind: CatalogKind, name: &str) -> PathBuf {
-    let slug = slugify(name);
-    PathBuf::from(kind.asset_dir()).join(format!("{}.{}", slug, kind.asset_extension()))
-}
-
-pub fn has_icon_file(kind: CatalogKind, name: &str) -> bool {
-    icon_path_for(kind, name).exists()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -425,9 +301,23 @@ mod tests {
     }"#;
 
     fn tiny() -> GameCatalog {
-        GameCatalog::from_raw_json(CatalogKind::LittleAlchemy1, TINY_JSON)
+        GameCatalog::from_raw_json(TINY_JSON)
     }
 
+    #[test]
+    fn load_uses_the_single_canonical_catalog() {
+        let catalog = GameCatalog::load();
+
+        assert_eq!(catalog.title(), "Little Alchemy");
+        assert_eq!(catalog.source, "little-alchemy");
+        assert_eq!(catalog.total, catalog.elements.len());
+        assert!(
+            catalog.elements.iter().all(|element| element
+                .pixel_sprite_path
+                .ends_with(format!("{}.png", element.slug))),
+            "every canonical element must carry its resolved runtime sprite path"
+        );
+    }
     #[test]
     fn slugify_normalises_to_kebab_ascii() {
         assert_eq!(slugify("Primordial Soup"), "primordial-soup");
@@ -466,7 +356,7 @@ mod tests {
     fn from_raw_json_indexes_base_unlocks_and_names() {
         let catalog = tiny();
         assert_eq!(catalog.total, 7);
-        assert_eq!(catalog.title(), "Little Alchemy 1");
+        assert_eq!(catalog.title(), "Little Alchemy");
         assert_eq!(catalog.source, "unit-test");
         // Base elements are the first four.
         assert_eq!(catalog.base_indices, vec![0, 1, 2, 3]);
@@ -518,41 +408,6 @@ mod tests {
         assert_eq!(catalog.canonical_name(4), "Steam");
     }
 
-    #[test]
-    fn icon_path_uses_slug_and_kind_extension() {
-        let p1 = icon_path_for(CatalogKind::LittleAlchemy1, "Primordial Soup");
-        assert!(p1.ends_with("primordial-soup.png"));
-        let p2 = icon_path_for(CatalogKind::LittleAlchemy2, "Primordial Soup");
-        assert!(p2.ends_with("primordial-soup.svg"));
-        assert!(!has_icon_file(
-            CatalogKind::LittleAlchemy1,
-            "Definitely Not A Real Element 99"
-        ));
-    }
-
-    #[test]
-    fn catalog_kind_paths_are_consistent_per_kind() {
-        assert_eq!(CatalogKind::LittleAlchemy1.asset_extension(), "png");
-        assert_eq!(CatalogKind::LittleAlchemy2.asset_extension(), "svg");
-        assert!(
-            CatalogKind::LittleAlchemy1
-                .asset_dir()
-                .contains("little-alchemy-1")
-        );
-        assert!(
-            CatalogKind::LittleAlchemy2
-                .pixel_sprite_dir()
-                .contains("little-alchemy-2")
-        );
-    }
-
-    fn catalog_named(kind: CatalogKind) -> GameCatalog {
-        GameCatalog::load_all()
-            .into_iter()
-            .find(|catalog| catalog.kind == kind)
-            .expect("catalog present")
-    }
-
     /// Distinct recipe-input names that do not resolve to any element entry.
     fn dangling_recipe_inputs(catalog: &GameCatalog) -> std::collections::BTreeSet<String> {
         let mut missing = std::collections::BTreeSet::new();
@@ -569,69 +424,18 @@ mod tests {
     }
 
     #[test]
-    fn little_alchemy_1_recipe_inputs_all_resolve() {
-        // The primary catalog must be referentially complete: every recipe
-        // ingredient names an element that actually exists.
-        let catalog = catalog_named(CatalogKind::LittleAlchemy1);
+    fn canonical_recipe_inputs_all_resolve() {
+        let catalog = GameCatalog::load();
         let missing = dangling_recipe_inputs(&catalog);
         assert!(
             missing.is_empty(),
-            "Little Alchemy 1 has unresolved recipe inputs: {missing:?}"
-        );
-    }
-
-    #[test]
-    fn little_alchemy_2_dangling_inputs_match_known_baseline() {
-        // KNOWN DATA GAP: the scraped LA2 set lists 720 elements but references
-        // 29 ingredient names (mostly Myths & Monsters content, plus a couple of
-        // likely typos such as "Baast") that have no element entry. Those recipes
-        // are inert rather than crashing. Pinning the exact set here documents the
-        // gap and guards against regression: if the data is fixed this shrinks
-        // (update the list), and any *new* dangling name fails the test loudly.
-        const KNOWN_DANGLING: [&str; 29] = [
-            "Baast",
-            "Baba yaga",
-            "Babe the blue ox",
-            "Book of the dead",
-            "Cockatrice",
-            "Cosmic egg",
-            "Cupid",
-            "Curse",
-            "Cyclops",
-            "Deity",
-            "Demon",
-            "Dionysus",
-            "Elf",
-            "Faerie",
-            "Good",
-            "Heaven",
-            "Holy grail",
-            "Holy water",
-            "Jiangshi",
-            "Maui's fishhook",
-            "Monster",
-            "Necromancer",
-            "Paladin",
-            "Paul bunyan",
-            "Peach of immortality",
-            "Philosopher's stone",
-            "Selkie",
-            "Troll",
-            "Zeus",
-        ];
-        let catalog = catalog_named(CatalogKind::LittleAlchemy2);
-        let missing = dangling_recipe_inputs(&catalog);
-        let expected: std::collections::BTreeSet<String> =
-            KNOWN_DANGLING.iter().map(|s| s.to_string()).collect();
-        assert_eq!(
-            missing, expected,
-            "the set of unresolved LA2 recipe inputs drifted from the documented baseline"
+            "canonical catalog has unresolved recipe inputs: {missing:?}"
         );
     }
 
     #[test]
     fn combined_book_is_fully_discoverable_from_base_elements() {
-        let catalog = GameCatalog::load_combined_book();
+        let catalog = GameCatalog::load();
         let mut discovered = base_discovery_state(&catalog);
         let mut changed = true;
 
@@ -675,23 +479,16 @@ mod tests {
     }
 
     #[test]
-    fn real_catalogs_have_base_elements_and_sorted_unlocks() {
-        for catalog in GameCatalog::load_all() {
-            assert!(
-                !catalog.base_indices.is_empty(),
-                "{} should define base elements",
-                catalog.title()
-            );
-            // count_unlocks must be sorted ascending by minimum (reconcile relies on it).
-            let minimums: Vec<usize> = catalog.count_unlocks.iter().map(|(_, m)| *m).collect();
-            let mut sorted = minimums.clone();
-            sorted.sort_unstable();
-            assert_eq!(
-                minimums,
-                sorted,
-                "{} unlocks must be sorted",
-                catalog.title()
-            );
-        }
+    fn canonical_catalog_has_base_elements_and_sorted_unlocks() {
+        let catalog = GameCatalog::load();
+        assert!(
+            !catalog.base_indices.is_empty(),
+            "canonical catalog should define base elements"
+        );
+        // count_unlocks must be sorted ascending by minimum (reconcile relies on it).
+        let minimums: Vec<usize> = catalog.count_unlocks.iter().map(|(_, m)| *m).collect();
+        let mut sorted = minimums.clone();
+        sorted.sort_unstable();
+        assert_eq!(minimums, sorted, "canonical unlocks must be sorted");
     }
 }

@@ -11,7 +11,10 @@ impl App {
         match event {
             Event::Key(key) => self.handle_key(key),
             Event::Mouse(mouse) => self.handle_mouse(mouse),
-            Event::Paste(_) | Event::Resize(_, _) => {}
+            Event::Resize(width, height) => {
+                self.set_viewport(ratatui::layout::Rect::new(0, 0, width, height))
+            }
+            Event::Paste(_) => {}
             _ => {}
         }
     }

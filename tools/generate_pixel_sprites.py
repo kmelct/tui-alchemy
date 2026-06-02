@@ -35,8 +35,7 @@ class SpriteJob:
 
 
 UI_JOBS = [
-    ("catalog-la1", "Little Alchemy 1 catalog switch"),
-    ("catalog-la2", "Little Alchemy 2 catalog switch"),
+    ("catalog", "Little Alchemy recipe book"),
     ("combine", "combine selected elements"),
     ("clear", "clear current selection"),
     ("reset", "reset discovered elements"),
@@ -46,7 +45,7 @@ UI_JOBS = [
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--catalog", choices=["la1", "la2", "ui", "all"], default="all")
+    parser.add_argument("--catalog", choices=["catalog", "ui", "all"], default="all")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--only", action="append", default=[], help="Generate only this slug; repeatable.")
     parser.add_argument("--resume", action="store_true", help="Skip successful manifest entries with output files.")
@@ -125,10 +124,8 @@ def parse_env_file(path: Path) -> dict[str, str]:
 
 def select_jobs(catalog: str, only: set[str]) -> list[SpriteJob]:
     jobs: list[SpriteJob] = []
-    if catalog in {"la1", "all"}:
-        jobs.extend(catalog_jobs("la1", "little-alchemy-1", "little_alchemy_wiki.json", "png"))
-    if catalog in {"la2", "all"}:
-        jobs.extend(catalog_jobs("la2", "little-alchemy-2", "little_alchemy_2.json", "svg"))
+    if catalog in {"catalog", "all"}:
+        jobs.extend(catalog_jobs())
     if catalog in {"ui", "all"}:
         jobs.extend(ui_jobs())
     if only:
@@ -136,23 +133,32 @@ def select_jobs(catalog: str, only: set[str]) -> list[SpriteJob]:
     return jobs
 
 
-def catalog_jobs(catalog_id: str, dir_name: str, data_file: str, icon_ext: str) -> list[SpriteJob]:
-    data = json.loads((SCRIPT_ROOT / "data" / data_file).read_text())
+def catalog_jobs() -> list[SpriteJob]:
+    data = json.loads((SCRIPT_ROOT / "data" / "little_alchemy.json").read_text())
     jobs: list[SpriteJob] = []
     for element in data["elements"]:
+        sprite_path = Path(element["sprite"])
         slug = slugify(element.get("slug") or element["name"])
         recipes = tuple(tuple(recipe) for recipe in element.get("recipes", []))
+        source_icon = source_icon_for_sprite(sprite_path, slug)
         jobs.append(
             SpriteJob(
-                catalog=catalog_id,
+                catalog="catalog",
                 slug=slug,
                 name=element["name"],
                 recipes=recipes,
-                output_path=OUTPUT_ROOT / dir_name / f"{slug}.png",
-                source_icon=SCRIPT_ROOT / "assets" / "icons" / dir_name / f"{slug}.{icon_ext}",
+                output_path=Path.cwd() / sprite_path,
+                source_icon=source_icon,
             )
         )
     return jobs
+
+
+def source_icon_for_sprite(sprite_path: Path, slug: str) -> Path | None:
+    folder = sprite_path.parent.name
+    extension = "svg" if folder.endswith("-2") else "png"
+    candidate = SCRIPT_ROOT / "assets" / "icons" / folder / f"{slug}.{extension}"
+    return candidate if candidate.exists() else None
 
 
 def ui_jobs() -> list[SpriteJob]:

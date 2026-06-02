@@ -36,7 +36,11 @@ pub fn buffer_to_png(buffer: &Buffer, cell_w: u32, cell_h: u32) -> RgbaImage {
     let area = buffer.area;
     let width = (area.width as u32) * cell_w;
     let height = (area.height as u32) * cell_h;
-    let mut img = RgbaImage::new(width.max(1), height.max(1));
+    let mut img = RgbaImage::from_pixel(
+        width.max(1),
+        height.max(1),
+        color_to_rgba(Color::Reset, ColorRole::Background),
+    );
 
     for y in 0..area.height {
         for x in 0..area.width {
@@ -575,6 +579,16 @@ mod tests {
         let img = buffer_to_png_default(&buffer);
         assert_eq!(img.width(), 10 * CELL_W);
         assert_eq!(img.height(), 4 * CELL_H);
+    }
+
+    #[test]
+    fn empty_buffer_uses_scene_background_not_transparency() {
+        let buffer = Buffer::empty(Rect::new(0, 0, 0, 0));
+        let img = buffer_to_png_default(&buffer);
+
+        assert_eq!(img.width(), 1);
+        assert_eq!(img.height(), 1);
+        assert_eq!(*img.get_pixel(0, 0), Rgba([7, 16, 18, 255]));
     }
 
     #[test]

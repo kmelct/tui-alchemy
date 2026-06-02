@@ -64,6 +64,9 @@ fn save_view(
     if !revealed.is_empty() {
         app.reveal_elements_for_preview(revealed);
     }
+    if name == "03-drag-ghost" {
+        app.preview_drag_element("Water", width / 2, height / 2);
+    }
     for _ in 0..4 {
         app.tick();
     }

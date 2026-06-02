@@ -458,7 +458,7 @@ class PixelSpriteGeneratorTests(unittest.TestCase):
             (workspace / ".env").write_text("OPENAI_KEY=sk-test\n")
             result = self.run_script(
                 "--catalog",
-                "la1",
+                "catalog",
                 "--dry-run",
                 "--limit",
                 "4",
@@ -480,7 +480,7 @@ class PixelSpriteGeneratorTests(unittest.TestCase):
 
             result = self.run_script(
                 "--catalog",
-                "la1",
+                "catalog",
                 "--dry-run",
                 "--only",
                 "air",
@@ -489,7 +489,7 @@ class PixelSpriteGeneratorTests(unittest.TestCase):
             )
             forced = self.run_script(
                 "--catalog",
-                "la1",
+                "catalog",
                 "--dry-run",
                 "--force",
                 "--only",
@@ -529,7 +529,7 @@ class PixelSpriteGeneratorTests(unittest.TestCase):
             workspace = Path(tmp)
             result = self.run_script(
                 "--catalog",
-                "la1",
+                "catalog",
                 "--dry-run",
                 "--only",
                 "water",
@@ -601,42 +601,32 @@ class PixelSpriteGeneratorTests(unittest.TestCase):
     def test_all_catalog_elements_have_seeded_pixel_sprite_files(self):
         missing = []
         missing_frames = []
-        for data_file, folder in [
-            ("little_alchemy_wiki.json", "little-alchemy-1"),
-            ("little_alchemy_2.json", "little-alchemy-2"),
-        ]:
-            data = json.loads((ROOT / "data" / data_file).read_text())
-            for element in data["elements"]:
-                slug = slugify(element.get("slug") or element["name"])
-                base = ROOT / f"assets/pixel-sprites/{folder}/{slug}.png"
-                if not base.exists():
-                    missing.append(f"{folder}/{slug}.png")
-                for frame in range(1, 4):
-                    frame_path = ROOT / f"assets/pixel-sprites/{folder}/{slug}_idle_{frame}.png"
-                    if not frame_path.exists():
-                        missing_frames.append(f"{folder}/{slug}_idle_{frame}.png")
+        data = json.loads((ROOT / "data" / "little_alchemy.json").read_text())
+        for element in data["elements"]:
+            base = ROOT / element["sprite"]
+            if not base.exists():
+                missing.append(element["sprite"])
+            for frame in range(1, 4):
+                frame_path = base.with_name(f"{base.stem}_idle_{frame}{base.suffix}")
+                if not frame_path.exists():
+                    missing_frames.append(str(frame_path.relative_to(ROOT)))
 
         self.assertEqual(missing, [])
         self.assertEqual(missing_frames, [])
 
     def test_all_seeded_catalog_sprites_are_visible_pixel_art(self):
         weak = []
-        for data_file, folder in [
-            ("little_alchemy_wiki.json", "little-alchemy-1"),
-            ("little_alchemy_2.json", "little-alchemy-2"),
-        ]:
-            data = json.loads((ROOT / "data" / data_file).read_text())
-            for element in data["elements"]:
-                slug = slugify(element.get("slug") or element["name"])
-                path = ROOT / f"assets/pixel-sprites/{folder}/{slug}.png"
-                if not path.exists():
-                    weak.append((folder, slug, "missing", 0, 0))
-                    continue
-                pixels = read_png_pixels(path)
-                opaque = [pixel for pixel in pixels if pixel[3] > 0]
-                colors = {pixel for pixel in opaque}
-                if len(opaque) < 70 or len(colors) < 3:
-                    weak.append((folder, slug, "weak", len(opaque), len(colors)))
+        data = json.loads((ROOT / "data" / "little_alchemy.json").read_text())
+        for element in data["elements"]:
+            path = ROOT / element["sprite"]
+            if not path.exists():
+                weak.append((element["slug"], "missing", 0, 0))
+                continue
+            pixels = read_png_pixels(path)
+            opaque = [pixel for pixel in pixels if pixel[3] > 0]
+            colors = {pixel for pixel in opaque}
+            if len(opaque) < 70 or len(colors) < 3:
+                weak.append((element["slug"], "weak", len(opaque), len(colors)))
 
         self.assertEqual(
             weak,
@@ -669,30 +659,30 @@ class PixelSpriteGeneratorTests(unittest.TestCase):
                 f"{relative} should not be built only from chunky 4x4 blocks",
             )
 
-    def test_catalog_switch_icons_read_as_open_books(self):
-        for slug in ["catalog-la1", "catalog-la2"]:
-            pixels = read_png_pixels(ROOT / f"assets/pixel-sprites/ui/{slug}.png")
-            gutter = 0
-            left_page = 0
-            right_page = 0
+    def test_catalog_icon_reads_as_open_book(self):
+        slug = "catalog"
+        pixels = read_png_pixels(ROOT / f"assets/pixel-sprites/ui/{slug}.png")
+        gutter = 0
+        left_page = 0
+        right_page = 0
 
-            for y in range(8, 25):
-                if pixels[y * 32 + 15][3] == 0 or pixels[y * 32 + 16][3] == 0:
-                    gutter += 1
-                for x in range(7, 14):
-                    if pixels[y * 32 + x][3] > 0:
-                        left_page += 1
-                for x in range(18, 25):
-                    if pixels[y * 32 + x][3] > 0:
-                        right_page += 1
+        for y in range(8, 25):
+            if pixels[y * 32 + 15][3] == 0 or pixels[y * 32 + 16][3] == 0:
+                gutter += 1
+            for x in range(7, 14):
+                if pixels[y * 32 + x][3] > 0:
+                    left_page += 1
+            for x in range(18, 25):
+                if pixels[y * 32 + x][3] > 0:
+                    right_page += 1
 
-            self.assertGreaterEqual(
-                gutter,
-                8,
-                f"{slug} should have a visible spine/gutter, not a plain filled rectangle",
-            )
-            self.assertGreaterEqual(left_page, 45, f"{slug} needs a readable left page")
-            self.assertGreaterEqual(right_page, 45, f"{slug} needs a readable right page")
+        self.assertGreaterEqual(
+            gutter,
+            8,
+            f"{slug} should have a visible spine/gutter, not a plain filled rectangle",
+        )
+        self.assertGreaterEqual(left_page, 45, f"{slug} needs a readable left page")
+        self.assertGreaterEqual(right_page, 45, f"{slug} needs a readable right page")
 
     def test_air_sprite_uses_curled_wisps_instead_of_solid_bars(self):
         pixels = read_png_pixels(ROOT / "assets/pixel-sprites/little-alchemy-1/air.png")
