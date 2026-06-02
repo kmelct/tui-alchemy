@@ -328,7 +328,7 @@ fn triangle(
     }
 }
 
-fn edge(ax: i32, ay: i32, bx: i32, by: i32, px: i32, py: i32) -> i32 {
+const fn edge(ax: i32, ay: i32, bx: i32, by: i32, px: i32, py: i32) -> i32 {
     (px - ax) * (by - ay) - (py - ay) * (bx - ax)
 }
 
@@ -398,7 +398,7 @@ fn quadrant_span(
     }
 }
 
-fn quadrant_symbol(mask: u8) -> &'static str {
+const fn quadrant_symbol(mask: u8) -> &'static str {
     match mask {
         1 => "▗",
         2 => "▖",

@@ -1,44 +1,10 @@
+#[path = "data/kind.rs"]
+mod kind;
+
+pub use kind::CatalogKind;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CatalogKind {
-    LittleAlchemy1,
-    LittleAlchemy2,
-    Combined,
-}
-
-impl CatalogKind {
-    pub fn title(self) -> &'static str {
-        match self {
-            Self::LittleAlchemy1 => "Little Alchemy 1",
-            Self::LittleAlchemy2 => "Little Alchemy 2",
-            Self::Combined => "Little Alchemy",
-        }
-    }
-
-    pub fn asset_dir(self) -> &'static str {
-        match self {
-            Self::LittleAlchemy1 | Self::Combined => "assets/icons/little-alchemy-1",
-            Self::LittleAlchemy2 => "assets/icons/little-alchemy-2",
-        }
-    }
-
-    pub fn asset_extension(self) -> &'static str {
-        match self {
-            Self::LittleAlchemy1 | Self::Combined => "png",
-            Self::LittleAlchemy2 => "svg",
-        }
-    }
-
-    pub fn pixel_sprite_dir(self) -> &'static str {
-        match self {
-            Self::LittleAlchemy1 | Self::Combined => "assets/pixel-sprites/little-alchemy-1",
-            Self::LittleAlchemy2 => "assets/pixel-sprites/little-alchemy-2",
-        }
-    }
-}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RawCatalog {
@@ -278,7 +244,7 @@ impl GameCatalog {
         }
     }
 
-    pub fn title(&self) -> &'static str {
+    pub const fn title(&self) -> &'static str {
         self.kind.title()
     }
 
@@ -534,7 +500,7 @@ mod tests {
         // At the threshold: Quintessence (index 6) becomes available.
         assert_eq!(catalog.discoverable_by_count(5, &none_discovered), vec![6]);
         // Already discovered: excluded even above the threshold.
-        let mut discovered = none_discovered.clone();
+        let mut discovered = none_discovered;
         discovered[6] = true;
         assert!(catalog.discoverable_by_count(9, &discovered).is_empty());
     }

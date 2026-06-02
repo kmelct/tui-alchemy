@@ -66,7 +66,7 @@ pub fn save_png(img: &RgbaImage, path: impl AsRef<Path>) -> std::io::Result<()> 
 
 /// Map a ratatui [`Color`] to RGBA. Mirrors the HTML preview's `css_color`,
 /// except [`Color::Reset`] resolves to a visible tone per [`ColorRole`].
-pub fn color_to_rgba(color: Color, role: ColorRole) -> Rgba<u8> {
+pub const fn color_to_rgba(color: Color, role: ColorRole) -> Rgba<u8> {
     let (r, g, b) = match color {
         // Reset: looks like the terminal — dark scene bg, light text fg.
         Color::Reset => match role {
@@ -279,7 +279,11 @@ fn fill_rect(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, color: Rgba<u8
 }
 
 fn blend(fg: Rgba<u8>, bg: Rgba<u8>, factor: f32) -> Rgba<u8> {
-    let mix = |a: u8, b: u8| ((a as f32) * factor + (b as f32) * (1.0 - factor)).round() as u8;
+    let mix = |a: u8, b: u8| {
+        (a as f32)
+            .mul_add(factor, (b as f32) * (1.0 - factor))
+            .round() as u8
+    };
     Rgba([mix(fg[0], bg[0]), mix(fg[1], bg[1]), mix(fg[2], bg[2]), 255])
 }
 
@@ -332,7 +336,7 @@ fn paint_font_glyph(
 
 /// A minimal 5×7 bitmap font. Lowercase reuses uppercase forms (legible for QA).
 /// Each row's low 5 bits are columns, MSB = leftmost.
-fn font_glyph(ch: char) -> Option<[u8; 7]> {
+const fn font_glyph(ch: char) -> Option<[u8; 7]> {
     let upper = ch.to_ascii_uppercase();
     Some(match upper {
         ' ' => [0; 7],

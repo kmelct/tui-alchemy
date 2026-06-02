@@ -12,3 +12,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tiny-skia = "0.12.0"
 usvg = "0.47.0"
+
+
+[lints.clippy]
+nursery = { level = "deny", priority = -1 }

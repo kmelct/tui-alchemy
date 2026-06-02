@@ -1,114 +1,17 @@
-use crate::data::{
-    GameCatalog, active_palette_indices, base_discovery_state, discovered_count, normalize,
-};
+mod input;
+pub(crate) mod state;
+
+use crate::data::{GameCatalog, active_palette_indices, normalize};
 use crate::effects::ElementEffect;
-use crate::layout::{
-    atlas_panel, atlas_visible_count, board_inner, catalog_strip_rects, contains, grimoire_layout,
-    iso_board_cells, iso_capacity, iso_columns, iso_hit, rail_sections, scene_layout,
-};
 use crate::ui;
-use crossterm::event::{Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use std::collections::VecDeque;
+pub(crate) use state::{Banner, CatalogState, DragOrigin, DragState, RecipePreview};
 
-#[allow(dead_code)]
-pub(crate) const PALETTE_PAGE_SIZE: usize = 12;
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum DragOrigin {
-    Inventory,
-    Canvas,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct DragState {
-    pub element_index: usize,
-    pub origin: DragOrigin,
-    pub column: u16,
-    pub row: u16,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct RecipePreview {
-    pub left: usize,
-    pub right: usize,
-    pub result: usize,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Pane {
-    Inventory,
-    Canvas,
-}
-
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 enum HitTarget {
     Inventory(usize),
-    Canvas(usize),
     Slot(usize),
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct Banner {
-    pub text: String,
-    pub ttl: u8,
-    pub highlight: Option<usize>,
-}
-
-impl Banner {
-    fn new(text: impl Into<String>, ttl: u8, highlight: Option<usize>) -> Self {
-        Self {
-            text: text.into(),
-            ttl,
-            highlight,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct CatalogState {
-    pub discovered: Vec<bool>,
-    pub discovery_order: Vec<usize>,
-    pub selected: [Option<usize>; 2],
-    pub palette_cursor: usize,
-    pub palette_scroll: usize,
-    pub canvas_scroll: usize,
-    pub drag: Option<DragState>,
-    pub recent: VecDeque<usize>,
-    pub banner: Option<Banner>,
-    pub effects: Vec<ElementEffect>,
-    pub recipe_preview: Option<RecipePreview>,
-}
-
-impl CatalogState {
-    fn new(catalog: &GameCatalog) -> Self {
-        let discovered = base_discovery_state(catalog);
-        let discovery_order = catalog.base_indices.clone();
-
-        Self {
-            discovered,
-            discovery_order,
-            selected: [None, None],
-            palette_cursor: 0,
-            palette_scroll: 0,
-            canvas_scroll: 0,
-            drag: None,
-            recent: VecDeque::new(),
-            banner: None,
-            effects: Vec::new(),
-            recipe_preview: None,
-        }
-    }
-
-    fn discovered_count(&self) -> usize {
-        discovered_count(&self.discovered)
-    }
-
-    fn clear_selection(&mut self) {
-        self.selected = [None, None];
-    }
 }
 
 #[derive(Debug)]
@@ -147,15 +50,6 @@ impl App {
         ui::render_app(frame, self);
     }
 
-    pub fn handle_event(&mut self, event: Event) {
-        match event {
-            Event::Key(key) => self.handle_key(key),
-            Event::Mouse(mouse) => self.handle_mouse(mouse),
-            Event::Paste(_) | Event::Resize(_, _) => {}
-            _ => {}
-        }
-    }
-
     #[doc(hidden)]
     pub fn reveal_elements_for_preview(&mut self, names: &[&str]) {
         let catalog_index = self.active_catalog;
@@ -189,7 +83,6 @@ impl App {
         state.recipe_preview = None;
         state.palette_cursor = self.catalogs[catalog_index].base_indices.len();
         state.palette_scroll = self.catalogs[catalog_index].base_indices.len();
-        state.canvas_scroll = 0;
     }
 
     pub fn tick(&mut self) {
@@ -243,158 +136,6 @@ impl App {
         self.active_state().drag
     }
 
-    fn handle_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Tab => self.switch_catalog(1),
-            KeyCode::BackTab => self.switch_catalog(-1),
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.move_palette_cursor(-(self.inventory_columns().max(1) as isize))
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.move_palette_cursor(self.inventory_columns().max(1) as isize)
-            }
-            KeyCode::Left | KeyCode::Char('h') => self.move_palette_cursor(-1),
-            KeyCode::Right | KeyCode::Char('l') => self.move_palette_cursor(1),
-            KeyCode::PageUp => {
-                self.move_palette_cursor(-(self.inventory_visible_capacity().max(1) as isize))
-            }
-            KeyCode::PageDown => {
-                self.move_palette_cursor(self.inventory_visible_capacity().max(1) as isize)
-            }
-            KeyCode::Home => self.move_palette_cursor_to_start(),
-            KeyCode::End => self.move_palette_cursor_to_end(),
-            KeyCode::Esc => self.active_state_mut().clear_selection(),
-            KeyCode::Enter => self.select_cursor_element(),
-            KeyCode::Char(ch) if key.modifiers.is_empty() => {
-                if let Some(digit) = ch.to_digit(10) {
-                    if (1..=9).contains(&digit) {
-                        self.select_visible_slot((digit - 1) as usize);
-                    }
-                } else if ch == 'c' || ch == 'C' {
-                    self.active_state_mut().clear_selection();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_mouse(&mut self, mouse: MouseEvent) {
-        match mouse.kind {
-            MouseEventKind::Down(MouseButton::Left) => {
-                if let Some(catalog_index) = self.hit_catalog_control(mouse.column, mouse.row) {
-                    self.switch_to_catalog(catalog_index);
-                } else {
-                    self.begin_drag(mouse);
-                }
-            }
-            MouseEventKind::Drag(MouseButton::Left) => self.update_drag(mouse),
-            MouseEventKind::Up(MouseButton::Left) => self.finish_drag(mouse),
-            MouseEventKind::ScrollUp => self.scroll_at(mouse.column, mouse.row, -1),
-            MouseEventKind::ScrollDown => self.scroll_at(mouse.column, mouse.row, 1),
-            _ => {}
-        }
-    }
-
-    fn begin_drag(&mut self, mouse: MouseEvent) {
-        let Some(hit) = self.hit_test(mouse.column, mouse.row) else {
-            return;
-        };
-
-        let element_index = match hit {
-            HitTarget::Inventory(index) | HitTarget::Canvas(index) => index,
-            HitTarget::Slot(slot) => match self.active_state().selected[slot] {
-                Some(index) => index,
-                None => return,
-            },
-        };
-
-        let origin = match hit {
-            HitTarget::Inventory(_) => DragOrigin::Inventory,
-            HitTarget::Canvas(_) | HitTarget::Slot(_) => DragOrigin::Canvas,
-        };
-        let state = self.active_state_mut();
-        state.drag = Some(DragState {
-            element_index,
-            origin,
-            column: mouse.column,
-            row: mouse.row,
-        });
-        state.banner = None;
-        state.recipe_preview = None;
-    }
-
-    fn update_drag(&mut self, mouse: MouseEvent) {
-        let state = self.active_state_mut();
-        if let Some(drag) = state.drag.as_mut() {
-            drag.column = mouse.column;
-            drag.row = mouse.row;
-        }
-    }
-
-    fn finish_drag(&mut self, mouse: MouseEvent) {
-        let Some(drag) = self.active_state().drag else {
-            return;
-        };
-
-        let target = self.hit_test(mouse.column, mouse.row);
-        self.active_state_mut().drag = None;
-
-        match target {
-            Some(HitTarget::Slot(slot)) => self.drop_element_into_slot(drag.element_index, slot),
-            Some(HitTarget::Inventory(target_index)) | Some(HitTarget::Canvas(target_index))
-                if target_index != drag.element_index =>
-            {
-                self.combine_two_elements(drag.element_index, target_index);
-            }
-            Some(HitTarget::Inventory(_)) | Some(HitTarget::Canvas(_)) => {
-                self.select_element_by_index(drag.element_index);
-            }
-            None => self.select_element_by_index(drag.element_index),
-        }
-    }
-
-    fn scroll_at(&mut self, column: u16, row: u16, delta: isize) {
-        match self.hit_panel(column, row) {
-            Some(Pane::Inventory) => self.scroll_inventory(delta),
-            Some(Pane::Canvas) => self.scroll_canvas(delta),
-            None => {}
-        }
-    }
-
-    fn scroll_inventory(&mut self, delta: isize) {
-        if delta == 0 {
-            return;
-        }
-
-        let palette = self.active_palette();
-        if palette.is_empty() {
-            return;
-        }
-
-        let step = self.inventory_columns().max(1) as isize;
-        let max_scroll = palette
-            .len()
-            .saturating_sub(self.inventory_visible_capacity().max(1));
-        let current_scroll = self.active_state().palette_scroll as isize;
-        let next = current_scroll + delta.saturating_mul(step);
-        let state = self.active_state_mut();
-        state.palette_scroll = next.clamp(0, max_scroll as isize) as usize;
-        state.palette_cursor = state.palette_scroll.min(palette.len().saturating_sub(1));
-    }
-
-    fn scroll_canvas(&mut self, delta: isize) {
-        if delta == 0 {
-            return;
-        }
-
-        let visible = self.visible_canvas_count();
-        let state = self.active_state_mut();
-        let total = state.discovery_order.len();
-        let max_scroll = total.saturating_sub(visible);
-        let next = state.canvas_scroll as isize + delta;
-        state.canvas_scroll = next.clamp(0, max_scroll as isize) as usize;
-    }
-
     fn drop_element_into_slot(&mut self, element_index: usize, slot: usize) {
         let catalog = self.active_catalog();
         let element_name = catalog.canonical_name(element_index).to_string();
@@ -423,190 +164,6 @@ impl App {
             state.selected = [Some(left), Some(right)];
         }
         self.resolve_active_selection();
-    }
-
-    fn hit_panel(&self, column: u16, row: u16) -> Option<Pane> {
-        if self.viewport.width == 0 || self.viewport.height == 0 {
-            return None;
-        }
-
-        let scene = scene_layout(self.viewport);
-        let inventory = atlas_panel(
-            scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
-        );
-        if contains(inventory, column, row) {
-            return Some(Pane::Inventory);
-        }
-        if contains(grimoire_layout(scene.grimoire).panel, column, row) {
-            return Some(Pane::Canvas);
-        }
-        None
-    }
-
-    fn hit_test(&self, column: u16, row: u16) -> Option<HitTarget> {
-        if self.viewport.width == 0 || self.viewport.height == 0 {
-            return None;
-        }
-
-        let scene = scene_layout(self.viewport);
-        let inventory = atlas_panel(
-            scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
-        );
-
-        if contains(inventory, column, row) {
-            return self.hit_inventory(column, row);
-        }
-
-        if contains(grimoire_layout(scene.grimoire).panel, column, row) {
-            return self.hit_canvas(column, row);
-        }
-
-        None
-    }
-
-    fn hit_inventory(&self, column: u16, row: u16) -> Option<HitTarget> {
-        let scene = scene_layout(self.viewport);
-        let inner = board_inner(atlas_panel(
-            scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
-        ));
-
-        if !contains(inner, column, row) {
-            return None;
-        }
-
-        let palette = self.active_palette();
-        let state = self.active_state();
-        let cells = iso_board_cells(inner, palette.len(), state.palette_scroll);
-        iso_hit(&cells, column, row)
-            .and_then(|visible_index| palette.get(visible_index).copied())
-            .map(HitTarget::Inventory)
-    }
-
-    fn hit_canvas(&self, column: u16, row: u16) -> Option<HitTarget> {
-        let scene = scene_layout(self.viewport);
-        let grimoire = grimoire_layout(scene.grimoire);
-
-        if contains(grimoire.slot_left, column, row) {
-            return Some(HitTarget::Slot(0));
-        }
-        if contains(grimoire.slot_right, column, row) {
-            return Some(HitTarget::Slot(1));
-        }
-
-        None
-    }
-
-    fn hit_catalog_control(&self, column: u16, row: u16) -> Option<usize> {
-        if self.catalogs.len() <= 1 {
-            return None;
-        }
-
-        if self.viewport.width == 0 || self.viewport.height == 0 {
-            return None;
-        }
-
-        let scene = scene_layout(self.viewport);
-        if !contains(scene.rail, column, row) {
-            return None;
-        }
-
-        let strip = rail_sections(scene.rail).catalog_strip;
-        let rects = catalog_strip_rects(strip, self.catalogs.len());
-        rects
-            .into_iter()
-            .find(|(_, rect)| contains(*rect, column, row))
-            .map(|(index, _)| index)
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn visible_canvas_indices(&self) -> Vec<usize> {
-        let state = self.active_state();
-        let reversed = state.discovery_order.iter().rev().copied();
-        let skipped = reversed.skip(state.canvas_scroll);
-        let visible = self.visible_canvas_count();
-        skipped.take(visible).collect()
-    }
-
-    pub(crate) fn visible_canvas_count(&self) -> usize {
-        let scene = scene_layout(self.viewport);
-        let panel = atlas_panel(
-            scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
-        );
-        iso_capacity(board_inner(panel))
-    }
-
-    fn inventory_columns(&self) -> usize {
-        let scene = scene_layout(self.viewport);
-        let panel = atlas_panel(
-            scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
-        );
-        iso_columns(board_inner(panel))
-    }
-
-    fn inventory_visible_capacity(&self) -> usize {
-        let scene = scene_layout(self.viewport);
-        let panel = atlas_panel(
-            scene.board,
-            atlas_visible_count(
-                scene.board,
-                self.active_palette().len(),
-                self.active_state().palette_scroll,
-            ),
-        );
-        iso_capacity(board_inner(panel))
-    }
-
-    fn switch_catalog(&mut self, delta: isize) {
-        if self.catalogs.len() <= 1 {
-            return;
-        }
-
-        let len = self.catalogs.len() as isize;
-        let mut next = self.active_catalog as isize + delta;
-        if next < 0 {
-            next = len - 1;
-        }
-        if next >= len {
-            next = 0;
-        }
-        self.active_catalog = next as usize;
-        self.active_state_mut().drag = None;
-        self.ensure_palette_cursor_visible();
-    }
-
-    fn switch_to_catalog(&mut self, catalog_index: usize) {
-        if catalog_index >= self.catalogs.len() {
-            return;
-        }
-
-        self.active_catalog = catalog_index;
-        self.active_state_mut().drag = None;
-        self.ensure_palette_cursor_visible();
     }
 
     fn select_visible_slot(&mut self, palette_slot: usize) {
@@ -702,17 +259,6 @@ impl App {
         Self::sync_palette_scroll(state, palette.len(), page_size);
     }
 
-    fn ensure_palette_cursor_visible(&mut self) {
-        let palette = self.active_palette();
-        if palette.is_empty() {
-            return;
-        }
-        let page_size = self.inventory_visible_capacity().max(1);
-        let state = self.active_state_mut();
-        state.palette_cursor = state.palette_cursor.min(palette.len().saturating_sub(1));
-        Self::sync_palette_scroll(state, palette.len(), page_size);
-    }
-
     fn sync_palette_scroll(state: &mut CatalogState, palette_len: usize, page_size: usize) {
         if palette_len <= page_size {
             state.palette_scroll = 0;
@@ -734,8 +280,7 @@ impl App {
 
     fn resolve_active_selection(&mut self) {
         let catalog_index = self.active_catalog;
-        let [left, right] = self.states[catalog_index].selected;
-        let (Some(left), Some(right)) = (left, right) else {
+        let [Some(left), Some(right)] = self.states[catalog_index].selected else {
             return;
         };
 
@@ -795,7 +340,6 @@ impl App {
             let state = &mut self.states[catalog_index];
             state.discovered[element_index] = true;
             state.discovery_order.push(element_index);
-            state.canvas_scroll = 0;
         }
 
         let palette = self.active_palette();
@@ -877,7 +421,13 @@ impl App {
 mod tests {
     use super::*;
     use crate::data::CatalogKind;
-    use crossterm::event::KeyModifiers;
+    use crate::layout::{
+        atlas_panel, atlas_visible_count, board_inner, catalog_strip_rects, iso_board_cells,
+        rail_sections, scene_layout,
+    };
+    use crossterm::event::{
+        Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    };
 
     // Indices in TEST_JSON:
     // 0 Air* 1 Earth* 2 Fire* 3 Water* (base) | 4 Steam 5 Mud 6 Lava 7 Dust
@@ -1076,24 +626,13 @@ mod tests {
     }
 
     #[test]
-    fn tab_and_backtab_wrap_around_catalogs() {
+    fn tab_keys_do_not_change_the_single_recipe_book() {
         let mut app = app_two();
         assert_eq!(app.active_catalog, 0);
         app.handle_event(key(KeyCode::Tab));
-        assert_eq!(app.active_catalog, 1);
-        app.handle_event(key(KeyCode::Tab)); // wraps back to 0
         assert_eq!(app.active_catalog, 0);
-        app.handle_event(key(KeyCode::BackTab)); // wraps to last
-        assert_eq!(app.active_catalog, 1);
-    }
-
-    #[test]
-    fn switch_to_catalog_ignores_out_of_range_index() {
-        let mut app = app_two();
-        app.switch_to_catalog(99);
+        app.handle_event(key(KeyCode::BackTab));
         assert_eq!(app.active_catalog, 0);
-        app.switch_to_catalog(1);
-        assert_eq!(app.active_catalog, 1);
     }
 
     #[test]
@@ -1156,24 +695,6 @@ mod tests {
     }
 
     #[test]
-    fn canvas_scroll_clamps_within_bounds() {
-        let mut app = sized(100, 12);
-        app.reveal_elements_for_preview(&[
-            "Steam", "Mud", "Lava", "Dust", "Rain", "Stone", "Sand", "Glass",
-        ]);
-        for _ in 0..50 {
-            app.scroll_canvas(1);
-        }
-        let visible = app.visible_canvas_count();
-        let total = app.active_state().discovery_order.len();
-        assert!(app.active_state().canvas_scroll <= total.saturating_sub(visible));
-        for _ in 0..50 {
-            app.scroll_canvas(-1);
-        }
-        assert_eq!(app.active_state().canvas_scroll, 0);
-    }
-
-    #[test]
     fn dragging_one_board_element_onto_another_combines_them() {
         let mut app = sized(100, 40);
         let (wx, wy) = board_cell_center(&app, WATER);
@@ -1229,7 +750,7 @@ mod tests {
     }
 
     #[test]
-    fn clicking_a_catalog_tile_switches_the_active_catalog() {
+    fn clicking_a_recipe_book_tile_does_not_switch_catalogs() {
         let mut app = app_two();
         app.viewport = Rect::new(0, 0, 100, 40);
         let scene = scene_layout(app.viewport);
@@ -1238,10 +759,10 @@ mod tests {
         let (_, tile) = rects
             .iter()
             .find(|(index, _)| *index == 1)
-            .expect("la2 tile");
+            .expect("second fixture tile");
         let (x, y) = (tile.x + tile.width / 2, tile.y + tile.height / 2);
         app.handle_event(mouse(MouseEventKind::Down(MouseButton::Left), x, y));
-        assert_eq!(app.active_catalog, 1);
+        assert_eq!(app.active_catalog, 0);
     }
 
     #[test]

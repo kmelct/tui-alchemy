@@ -1,8 +1,11 @@
+#[path = "ui/sprite_strategy.rs"]
+mod sprite_strategy;
+
 use crate::app::App;
-use crate::effects::{EffectKind, ElementStyle};
+use crate::effects::ElementStyle;
 use crate::layout::{
-    IsoCell, atlas_panel, atlas_visible_count, board_inner, catalog_strip_rects, grimoire_layout,
-    iso_board_cells, rail_sections, scene_layout, stage_rect,
+    IsoCell, atlas_panel, atlas_visible_count, board_inner, grimoire_layout, iso_board_cells,
+    rail_sections, scene_layout, stage_rect,
 };
 use crate::palette::{palette_color, palette_color_for_seed};
 use crate::sprites::{sprite_lines_for_element_frame, sprite_lines_for_path_with_size};
@@ -12,6 +15,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Paragraph, Wrap};
+use sprite_strategy::SpriteRole;
 
 // Header HUD surfaces (kept identical to the legacy values the header expects).
 const HUD_BG: Color = Surfaces::RAIL_BG;
@@ -50,7 +54,7 @@ pub fn render_app(frame: &mut Frame<'_>, app: &App) {
                     app.active_state().palette_scroll,
                 ),
             ),
-            crate::app::DragOrigin::Canvas => grimoire_layout(scene.grimoire).panel,
+            crate::app::DragOrigin::Slot => grimoire_layout(scene.grimoire).panel,
         };
         render_drag_overlay(
             frame,
@@ -124,7 +128,7 @@ fn chamber_gradient(t: f32) -> Color {
     let (t1, r1, g1, b1) = STOPS[(i + 1).min(STOPS.len() - 1)];
     let span = (t1 - t0).max(f32::EPSILON);
     let k = ((t - t0) / span).clamp(0.0, 1.0);
-    let lerp = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * k).round() as u8;
+    let lerp = |a: u8, b: u8| (b as f32 - a as f32).mul_add(k, a as f32).round() as u8;
     Color::Rgb(lerp(r0, r1), lerp(g0, g1), lerp(b0, b1))
 }
 
@@ -132,7 +136,7 @@ fn chamber_surface(x: f32, y: f32) -> Color {
     let base = chamber_gradient(y);
     let dx = (x - 0.5).abs() * 2.0;
     let dy = (y - 0.72).abs() * 2.4;
-    let glow = (1.0 - (dx * dx * 0.72 + dy * dy)).clamp(0.0, 1.0);
+    let glow = (1.0 - (dx * dx).mul_add(0.72, dy * dy)).clamp(0.0, 1.0);
     let warmed = mix_color(base, Color::Rgb(36, 31, 42), glow * 0.52);
 
     let edge = ((dx - 0.68) / 0.32).clamp(0.0, 1.0);
@@ -144,21 +148,22 @@ fn mix_color(a: Color, b: Color, t: f32) -> Color {
     let (br, bg, bb) = rgb_components(b);
     let t = t.clamp(0.0, 1.0);
     let mix = |left: u8, right: u8| {
-        (left as f32 + (right as f32 - left as f32) * t)
+        (right as f32 - left as f32)
+            .mul_add(t, left as f32)
             .round()
             .clamp(0.0, 255.0) as u8
     };
     Color::Rgb(mix(ar, br), mix(ag, bg), mix(ab, bb))
 }
 
-fn rgb_components(color: Color) -> (u8, u8, u8) {
+const fn rgb_components(color: Color) -> (u8, u8, u8) {
     match color {
         Color::Rgb(red, green, blue) => (red, green, blue),
         _ => (0, 0, 0),
     }
 }
 
-fn speck_hash(x: u16, y: u16) -> u32 {
+const fn speck_hash(x: u16, y: u16) -> u32 {
     let mut h = (x as u32).wrapping_mul(73_856_093) ^ (y as u32).wrapping_mul(19_349_663);
     h ^= h >> 13;
     h = h.wrapping_mul(0x5bd1_e995);
@@ -382,12 +387,12 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let status_style = Style::default().bg(HUD_SHADOW);
 
     let logo_top = vec![Span::styled(
-        "▛▀TUI▀▜",
+        "▛◢✦◣▜",
         title_style
             .fg(palette_color(14))
             .add_modifier(Modifier::BOLD),
     )];
-    let logo_bottom = vec![Span::styled("▙▄▄✦▄▄▟", status_style.fg(palette_color(5)))];
+    let logo_bottom = vec![Span::styled("▙◥◇◤▟", status_style.fg(palette_color(5)))];
 
     let title_spans = vec![
         Span::styled(
@@ -400,7 +405,9 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Span::styled("◆ ", title_style.fg(palette_color(9))),
         Span::styled(
             format!("{discovered} / {}", app.active_total()),
-            title_style.fg(palette_color(9)).add_modifier(Modifier::BOLD),
+            title_style
+                .fg(palette_color(9))
+                .add_modifier(Modifier::BOLD),
         ),
         Span::styled("  ", title_style),
         Span::styled("▣ ", title_style.fg(palette_color(11))),
@@ -412,22 +419,25 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
         ),
     ];
 
-    let status_spans = if let Some(text) = active_banner {
-        vec![
-            Span::styled("✦ ", status_style.fg(palette_color(1))),
-            Span::styled(
-                text.to_string(),
-                status_style
-                    .fg(palette_color(1))
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]
-    } else {
-        vec![Span::styled(
-            format!("{}  crafting table workbench", catalog.title()),
-            status_style.fg(palette_color(14)),
-        )]
-    };
+    let status_spans = active_banner.map_or_else(
+        || {
+            vec![Span::styled(
+                format!("{}  crafting table workbench", catalog.title()),
+                status_style.fg(palette_color(14)),
+            )]
+        },
+        |text| {
+            vec![
+                Span::styled("✦ ", status_style.fg(palette_color(1))),
+                Span::styled(
+                    text.to_string(),
+                    status_style
+                        .fg(palette_color(1))
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]
+        },
+    );
 
     let plaque_inner = span_width(&title_spans)
         .max(span_width(&status_spans))
@@ -452,9 +462,11 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, app: &App) {
     }
 }
 
-
 fn span_width(spans: &[Span<'static>]) -> u16 {
-    spans.iter().map(|span| span.content.chars().count()).sum::<usize>() as u16
+    spans
+        .iter()
+        .map(|span| span.content.chars().count())
+        .sum::<usize>() as u16
 }
 
 fn framed_header_top(spans: Vec<Span<'static>>, inner_width: u16) -> Vec<Span<'static>> {
@@ -464,15 +476,15 @@ fn framed_header_top(spans: Vec<Span<'static>>, inner_width: u16) -> Vec<Span<'s
     let left_rails = rail_total / 2;
     let right_rails = rail_total.saturating_sub(left_rails);
     let mut row = Vec::with_capacity(5 + spans.len());
-    row.push(Span::styled("▛", rim));
+    row.push(Span::styled("╔◇", rim));
     if left_rails > 0 {
-        row.push(Span::styled("▀".repeat(left_rails as usize), rim));
+        row.push(Span::styled("═".repeat(left_rails as usize), rim));
     }
     row.extend(spans);
     if right_rails > 0 {
-        row.push(Span::styled("▀".repeat(right_rails as usize), rim));
+        row.push(Span::styled("═".repeat(right_rails as usize), rim));
     }
-    row.push(Span::styled("▜", rim));
+    row.push(Span::styled("◇╗", rim));
     row
 }
 
@@ -483,7 +495,7 @@ fn framed_header_body(spans: Vec<Span<'static>>, inner_width: u16) -> Vec<Span<'
     let left_pad = inner_width.saturating_sub(content_width) / 2;
     let right_pad = inner_width.saturating_sub(content_width + left_pad);
     let mut row = Vec::with_capacity(5 + spans.len());
-    row.push(Span::styled("▌", rim));
+    row.push(Span::styled("╚∿", rim));
     if left_pad > 0 {
         row.push(Span::styled(" ".repeat(left_pad as usize), body));
     }
@@ -491,7 +503,7 @@ fn framed_header_body(spans: Vec<Span<'static>>, inner_width: u16) -> Vec<Span<'
     if right_pad > 0 {
         row.push(Span::styled(" ".repeat(right_pad as usize), body));
     }
-    row.push(Span::styled("▐", rim));
+    row.push(Span::styled("∿╝", rim));
     row
 }
 
@@ -609,25 +621,20 @@ fn render_catalog_strip(frame: &mut Frame<'_>, strip: Rect, app: &App) {
         Surfaces::RAIL_BG,
     );
 
-    let controls = control_tiles(app);
-    let rects = catalog_strip_rects(strip, controls.len());
-    for &(index, rect) in &rects {
-        let control = &controls[index];
-        let accent = if control.is_active {
-            palette_color(Ink::STAT)
-        } else {
-            palette_color(Ink::FRAME)
-        };
-        let icon_path = control.icon_path();
-        let mut lines = sprite_lines_for_path_with_size(icon_path.as_ref(), control.label, 6, 6);
+    let rects = crate::layout::catalog_strip_rects(strip, 1);
+    if let Some((_, rect)) = rects.first().copied() {
+        let accent = palette_color(Ink::STAT);
+        let mut lines = sprite_lines_for_path_with_size(
+            std::path::Path::new("assets/pixel-sprites/ui/catalog-la1.png"),
+            "Book",
+            6,
+            6,
+        );
         lines.push(Line::from(Span::styled(
-            fit_label(control.label, rect.width as usize),
+            fit_label("Book", rect.width as usize),
             Style::default().fg(accent),
         )));
-        render_shelf_tile(frame, rect, accent, lines, control.is_active);
-    }
-    if rects.len() > 1 {
-        render_catalog_switch_arrow(frame, &rects);
+        render_shelf_tile(frame, rect, accent, lines, true);
     }
 }
 
@@ -673,9 +680,10 @@ fn render_iso_board(frame: &mut Frame<'_>, area: Rect, app: &App) {
     for cell in &cells {
         let element_index = palette[cell.index];
         let element = &catalog.elements[element_index];
-        let has_birth_effect = state.effects.iter().any(|effect| {
-            effect.element_index == element_index && effect.kind == EffectKind::Birth
-        });
+        let has_birth_effect = state
+            .effects
+            .iter()
+            .any(|effect| effect.element_index == element_index);
         let accent = if app.active_banner_highlight() == Some(element_index) {
             palette_color(9)
         } else if state.selected.contains(&Some(element_index)) {
@@ -713,17 +721,16 @@ fn render_iso_board(frame: &mut Frame<'_>, area: Rect, app: &App) {
         let max_sprite_lines = (cell.top.height as usize)
             .saturating_sub(label_lines.len())
             .max(1);
-        let sprite_width = if cell.top.width > 10 {
-            cell.top.width.saturating_sub(2).clamp(12, 18)
-        } else {
-            8
-        };
-        let sprite_height = if cell.top.height > 6 { 12 } else { 10 };
+        let sprite_size = SpriteRole::AtlasTile {
+            tile_width: cell.top.width,
+            tile_height: cell.top.height,
+        }
+        .sprite_size();
         let mut sprite_lines = sprite_lines_for_element_frame(
             catalog.kind,
             element,
-            sprite_width as u32,
-            sprite_height as u32,
+            sprite_size.width,
+            sprite_size.height,
             sprite_tick,
         );
         if has_birth_effect {
@@ -906,8 +913,14 @@ fn render_grimoire_slot(frame: &mut Frame<'_>, rect: Rect, app: &App, element: O
         } else {
             palette_color_for_seed(element_index as u64)
         };
-        let mut sprite_lines =
-            sprite_lines_for_element_frame(catalog.kind, element, 8, 8, app.tick_counter);
+        let sprite_size = SpriteRole::IngredientSlot.sprite_size();
+        let mut sprite_lines = sprite_lines_for_element_frame(
+            catalog.kind,
+            element,
+            sprite_size.width,
+            sprite_size.height,
+            app.tick_counter,
+        );
         sprite_lines = trim_empty_sprite_padding(sprite_lines);
         if is_birth {
             sprite_lines = living_sprite_glint(sprite_lines, app.tick_counter, palette_color(9));
@@ -944,8 +957,14 @@ fn render_grimoire_result(frame: &mut Frame<'_>, rect: Rect, app: &App, element:
         let element = &catalog.elements[element_index];
         let is_birth = app.active_banner_highlight() == Some(element_index);
         let accent = palette_color(Ink::STAT);
-        let mut sprite_lines =
-            sprite_lines_for_element_frame(catalog.kind, element, 12, 12, app.tick_counter);
+        let sprite_size = SpriteRole::ResultSlot.sprite_size();
+        let mut sprite_lines = sprite_lines_for_element_frame(
+            catalog.kind,
+            element,
+            sprite_size.width,
+            sprite_size.height,
+            app.tick_counter,
+        );
         sprite_lines = trim_empty_sprite_padding(sprite_lines);
         if is_birth {
             sprite_lines = living_sprite_glint(sprite_lines, app.tick_counter, palette_color(9));
@@ -1220,62 +1239,6 @@ fn slot_bed_for_element(name: &str, seed: usize, is_output: bool, is_birth: bool
     }
 }
 
-fn render_catalog_switch_arrow(frame: &mut Frame<'_>, rects: &[(usize, Rect)]) {
-    if rects.len() < 2 {
-        return;
-    }
-
-    let left = rects[0].1;
-    let right = rects[1].1;
-    let x = left
-        .x
-        .saturating_add(left.width)
-        .saturating_add(right.x.saturating_sub(left.x.saturating_add(left.width)) / 2);
-    let y = left.y.saturating_add(left.height / 2);
-    render_line(
-        frame,
-        Rect::new(x, y, 1, 1),
-        Line::from(Span::styled(
-            "⇆",
-            Style::default()
-                .fg(palette_color(9))
-                .add_modifier(Modifier::BOLD),
-        )),
-    );
-}
-
-fn control_tiles(app: &App) -> Vec<ControlTile> {
-    if app.catalogs.len() == 1 {
-        return vec![ControlTile::new("Book", "catalog-la1", true)];
-    }
-
-    let active = app.active_catalog;
-    vec![
-        ControlTile::new("LA1 book", "catalog-la1", active == 0),
-        ControlTile::new("LA2 book", "catalog-la2", active == 1),
-    ]
-}
-
-struct ControlTile {
-    label: &'static str,
-    icon_slug: &'static str,
-    is_active: bool,
-}
-
-impl ControlTile {
-    fn new(label: &'static str, icon_slug: &'static str, is_active: bool) -> Self {
-        Self {
-            label,
-            icon_slug,
-            is_active,
-        }
-    }
-
-    fn icon_path(&self) -> std::path::PathBuf {
-        std::path::PathBuf::from("assets/pixel-sprites/ui").join(format!("{}.png", self.icon_slug))
-    }
-}
-
 fn render_drag_overlay(
     frame: &mut Frame<'_>,
     area: Rect,
@@ -1298,11 +1261,12 @@ fn render_drag_overlay(
         .min(area.y + area.height.saturating_sub(height));
     let overlay = Rect::new(x, y, width, height);
     let mut lines = Vec::new();
+    let sprite_size = SpriteRole::DragGhost.sprite_size();
     lines.extend(sprite_lines_for_element_frame(
         catalog.kind,
         element,
-        8,
-        8,
+        sprite_size.width,
+        sprite_size.height,
         0,
     ));
     let lines = lines
@@ -1511,7 +1475,7 @@ fn living_sprite_glint(lines: Vec<Line<'static>>, tick: u64, color: Color) -> Ve
         .collect()
 }
 
-fn center_block(mut lines: Vec<Line<'static>>, height: u16, width: u16) -> Vec<Line<'static>> {
+fn center_block(lines: Vec<Line<'static>>, height: u16, width: u16) -> Vec<Line<'static>> {
     let mut out = Vec::new();
     let content_height = lines.len() as u16;
     let top_pad = height.saturating_sub(content_height) / 2;
@@ -1519,7 +1483,7 @@ fn center_block(mut lines: Vec<Line<'static>>, height: u16, width: u16) -> Vec<L
         out.push(Line::from(""));
     }
 
-    for line in lines.drain(..) {
+    for line in lines {
         out.push(center_line(line, width));
     }
 

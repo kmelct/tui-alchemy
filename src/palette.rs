@@ -20,11 +20,11 @@ pub const LOST_CENTURY: [Color; 16] = [
     Color::Rgb(171, 155, 142),
 ];
 
-pub fn palette_color(index: usize) -> Color {
+pub const fn palette_color(index: usize) -> Color {
     LOST_CENTURY[index % LOST_CENTURY.len()]
 }
 
-pub fn palette_color_for_seed(seed: u64) -> Color {
+pub const fn palette_color_for_seed(seed: u64) -> Color {
     let mut value = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
     value = (value ^ (value >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     value = (value ^ (value >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
@@ -52,7 +52,7 @@ pub fn nearest_palette_color(pixel: &Rgba<u8>) -> Color {
     LOST_CENTURY[best_index]
 }
 
-fn color_to_rgb(color: Color) -> (u8, u8, u8) {
+const fn color_to_rgb(color: Color) -> (u8, u8, u8) {
     match color {
         Color::Rgb(r, g, b) => (r, g, b),
         Color::Indexed(index) => {

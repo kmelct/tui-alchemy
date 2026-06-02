@@ -1,6 +1,8 @@
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 
 pub(crate) const HEADER_HEIGHT: u16 = 2;
+pub(crate) const TOP_SAFE_MARGIN: u16 = 1;
+pub(crate) const HEADER_WORKSHOP_GAP: u16 = 2;
 
 // --- Scene composition (compact rail | iso board | grimoire) ---
 pub(crate) const RAIL_WIDTH_PCT: u16 = 16;
@@ -23,9 +25,6 @@ pub(crate) const ISO_SHADOW: u16 = 1; // cast-shadow row (doubles as vertical ga
 pub(crate) const ISO_SIDE: u16 = 0; // (unused) right shaded face
 pub(crate) const ISO_GAP_X: u16 = 1; // gap between columns
 pub(crate) const ISO_STAGGER: u16 = 1; // odd-row horizontal recede
-
-const ISO_COL_STRIDE: u16 = ISO_TILE_WIDTH + ISO_SIDE + ISO_GAP_X;
-const ISO_ROW_STRIDE: u16 = ISO_TILE_HEIGHT + ISO_DEPTH + ISO_SHADOW;
 
 #[derive(Debug, Clone, Copy)]
 struct IsoGeometry {
@@ -59,19 +58,19 @@ impl IsoGeometry {
         stagger: 1,
     };
 
-    fn col_stride(self) -> u16 {
+    const fn col_stride(self) -> u16 {
         self.tile_width
             .saturating_add(self.side)
             .saturating_add(self.gap_x)
     }
 
-    fn row_stride(self) -> u16 {
+    const fn row_stride(self) -> u16 {
         self.tile_height
             .saturating_add(self.depth)
             .saturating_add(self.shadow)
     }
 }
-pub(crate) fn contains(rect: Rect, column: u16, row: u16) -> bool {
+pub(crate) const fn contains(rect: Rect, column: u16, row: u16) -> bool {
     column >= rect.x
         && column < rect.x.saturating_add(rect.width)
         && row >= rect.y
@@ -90,27 +89,28 @@ pub(crate) struct SceneLayout {
     pub grimoire: Rect,
 }
 
-/// The playfield. Height is always the full terminal height (top-anchored) so
-/// the board grows and shrinks as the window resizes — the scene is fully
-/// responsive vertically. Width is capped and centred only so the columns stay
-/// cohesive on very wide terminals (the backdrop fills the side margins).
+/// The playfield. It keeps a small top safe area so the two-row logo/title band
+/// never touches terminal chrome, then stays responsive with width capped and
+/// centred only so the columns remain cohesive on very wide terminals.
 pub(crate) fn stage_rect(area: Rect) -> Rect {
     let w = area.width.min(STAGE_MAX_WIDTH);
+    let top_margin = top_safe_margin(area);
     Rect::new(
         area.x.saturating_add((area.width.saturating_sub(w)) / 2),
-        area.y,
+        area.y.saturating_add(top_margin),
         w,
-        area.height,
+        area.height.saturating_sub(top_margin),
     )
 }
 
 pub(crate) fn scene_layout(area: Rect) -> SceneLayout {
     let stage = stage_rect(area);
+    let header_offset = HEADER_HEIGHT.saturating_add(header_workshop_gap(stage));
     let main = Rect::new(
         stage.x,
-        stage.y.saturating_add(HEADER_HEIGHT),
+        stage.y.saturating_add(header_offset),
         stage.width,
-        stage.height.saturating_sub(HEADER_HEIGHT),
+        stage.height.saturating_sub(header_offset),
     );
 
     if main.width < NARROW_BREAKPOINT {
@@ -173,7 +173,23 @@ pub(crate) fn scene_layout(area: Rect) -> SceneLayout {
     }
 }
 
-fn iso_geometry(area: Rect) -> IsoGeometry {
+const fn top_safe_margin(area: Rect) -> u16 {
+    if area.width >= 130 && area.height >= 24 {
+        TOP_SAFE_MARGIN
+    } else {
+        0
+    }
+}
+
+const fn header_workshop_gap(stage: Rect) -> u16 {
+    if stage.width >= 130 && stage.height >= 24 {
+        HEADER_WORKSHOP_GAP
+    } else {
+        0
+    }
+}
+
+const fn iso_geometry(area: Rect) -> IsoGeometry {
     if area.width >= 60 && area.height >= 12 {
         IsoGeometry::LARGE
     } else {
@@ -200,7 +216,7 @@ fn iso_capacity_for(area: Rect, geometry: IsoGeometry) -> usize {
         .max(1)
 }
 
-fn centered_offset(available: u16, content: u16) -> u16 {
+const fn centered_offset(available: u16, content: u16) -> u16 {
     available.saturating_sub(content) / 2
 }
 
@@ -212,21 +228,21 @@ pub(crate) fn atlas_visible_count(area: Rect, total: usize, scroll: usize) -> us
     remaining.min(iso_capacity_for(available, geometry)).max(1)
 }
 pub(crate) fn atlas_panel(area: Rect, count: usize) -> Rect {
+    let available = board_inner(area);
+    let geometry = iso_geometry(available);
     if area.width >= 60 && area.height >= 18 {
-        let available = board_inner(area);
-        let geometry = iso_geometry(available);
-        let rows = 2usize.min(iso_rows_for(available, geometry).max(1));
+        let max_columns = iso_columns_for(available, geometry).max(1);
+        let max_rows = iso_rows_for(available, geometry).max(1);
+        let visible = count.max(1);
+        let rows = visible.div_ceil(max_columns).max(2).min(max_rows);
         let panel_h = ((rows as u16).saturating_mul(geometry.row_stride()))
             .saturating_add(2)
             .clamp(12, area.height);
         Rect::new(area.x, area.y, area.width, panel_h)
     } else {
-        let available = board_inner(area);
         if available.width == 0 || available.height == 0 {
             return area;
         }
-
-        let geometry = iso_geometry(available);
         let max_columns = iso_columns_for(available, geometry).max(1);
         let max_rows = iso_rows_for(available, geometry).max(1);
         let visible = count.max(1);
@@ -333,7 +349,7 @@ pub(crate) struct IsoCell {
 }
 
 /// Inner drawing area of the board (inset for frame + room for the panel label).
-pub(crate) fn board_inner(board: Rect) -> Rect {
+pub(crate) const fn board_inner(board: Rect) -> Rect {
     if board.width <= 2 || board.height <= 2 {
         return board;
     }
@@ -346,20 +362,11 @@ pub(crate) fn board_inner(board: Rect) -> Rect {
 }
 
 pub(crate) fn iso_columns(area: Rect) -> usize {
-    ((area
-        .width
-        .saturating_sub(ISO_STAGGER)
-        .saturating_add(ISO_GAP_X))
-        / ISO_COL_STRIDE)
-        .max(1) as usize
-}
-
-pub(crate) fn iso_rows(area: Rect) -> usize {
-    (area.height / ISO_ROW_STRIDE).max(1) as usize
+    iso_columns_for(area, iso_geometry(area))
 }
 
 pub(crate) fn iso_capacity(area: Rect) -> usize {
-    iso_columns(area).saturating_mul(iso_rows(area)).max(1)
+    iso_capacity_for(area, iso_geometry(area))
 }
 pub(crate) fn iso_board_cells(area: Rect, count: usize, scroll: usize) -> Vec<IsoCell> {
     if area.width == 0 || area.height == 0 {
@@ -459,14 +466,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn atlas_panel_keeps_a_stable_slot_on_the_same_viewport() {
-        let board = Rect::new(0, 0, 80, 24);
-        let small = atlas_panel(board, 4);
-        let grown = atlas_panel(board, 7);
+    fn tall_atlas_panel_uses_available_height_before_scrolling() {
+        let board = Rect::new(0, 0, 80, 42);
+        let two_rows = atlas_panel(board, 10);
+        let three_rows = atlas_panel(board, 11);
 
+        assert!(
+            three_rows.height > two_rows.height,
+            "a tall atlas should grow to another row before requiring scroll"
+        );
         assert_eq!(
-            small, grown,
-            "discovering a few more elements should not make the atlas panel itself grow or shrink within the same viewport"
+            atlas_visible_count(board, 11, 0),
+            11,
+            "eleven discoveries should fit in the available tall atlas before scrolling"
+        );
+
+        let full_page = atlas_visible_count(board, 21, 0);
+        let full_panel = atlas_panel(board, full_page);
+        assert_eq!(
+            iso_capacity(board_inner(full_panel)),
+            full_page,
+            "scroll capacity should match the rendered wide-screen atlas geometry"
         );
     }
 }
@@ -563,7 +583,7 @@ fn craft_slot_rects(area: Rect) -> [Rect; 3] {
     [left, middle, result]
 }
 
-fn inset(rect: Rect, by: u16) -> Rect {
+const fn inset(rect: Rect, by: u16) -> Rect {
     if rect.width <= by * 2 || rect.height <= by * 2 {
         return rect;
     }

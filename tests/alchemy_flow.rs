@@ -13,11 +13,11 @@ const STEAM_BIRTH_AURA_BG: ratatui::style::Color = ratatui::style::Color::Rgb(39
 const STEAM_BIRTH_HALO_BG: ratatui::style::Color = ratatui::style::Color::Rgb(50, 65, 82);
 const WORKBENCH_SLOT_BG: ratatui::style::Color = ratatui::style::Color::Rgb(64, 50, 55);
 
-fn key(code: KeyCode) -> Event {
+const fn key(code: KeyCode) -> Event {
     Event::Key(KeyEvent::new(code, KeyModifiers::NONE))
 }
 
-fn mouse(kind: MouseEventKind, column: u16, row: u16) -> Event {
+const fn mouse(kind: MouseEventKind, column: u16, row: u16) -> Event {
     Event::Mouse(MouseEvent {
         kind,
         column,
@@ -34,29 +34,21 @@ fn selecting_water_and_fire_discovers_steam() {
 
     terminal.draw(|frame| app.render(frame)).unwrap();
     let initial_lines = buffer_lines(terminal.backend().buffer());
+    let (title_row, status_row) = header_row_indices(&initial_lines);
     assert!(
-        initial_lines
-            .first()
-            .map(|line| line.contains("Little Alchemy"))
-            .unwrap_or(false),
+        initial_lines[title_row].contains("LITTLE ALCHEMY"),
         "expected title in header, got: {:?}",
-        initial_lines.first()
+        initial_lines.get(title_row)
     );
     assert!(
-        initial_lines
-            .first()
-            .map(|line| line.contains("4 / 755"))
-            .unwrap_or(false),
+        initial_lines[title_row].contains("4 / 755"),
         "expected discovered count in header, got: {:?}",
-        initial_lines.first()
+        initial_lines.get(title_row)
     );
     assert!(
-        initial_lines
-            .get(1)
-            .map(|line| line.contains("Little Alchemy"))
-            .unwrap_or(false),
+        initial_lines[status_row].contains("Little Alchemy"),
         "expected active catalog in status line, got: {:?}",
-        initial_lines.get(1)
+        initial_lines.get(status_row)
     );
 
     app.handle_event(key(KeyCode::Char('4')));
@@ -94,7 +86,8 @@ fn selecting_water_twice_discovers_sea() {
     app.tick();
 
     terminal.draw(|frame| app.render(frame)).unwrap();
-    let text = buffer_to_text(terminal.backend().buffer());
+    let lines = buffer_lines(terminal.backend().buffer());
+    let text = lines.join("\n");
 
     assert!(
         text.contains("sea"),
@@ -483,7 +476,15 @@ fn initial_screen_reads_like_an_atlas_not_a_debug_dashboard() {
     let mut app = App::new();
 
     terminal.draw(|frame| app.render(frame)).unwrap();
-    let text = buffer_to_text(terminal.backend().buffer());
+    let lines = buffer_lines(terminal.backend().buffer());
+    let text = lines.join("\n");
+    let (_, status_row) = header_row_indices(&lines);
+    let body_text = lines
+        .iter()
+        .skip(status_row + 1)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
 
     assert!(
         text.contains("atlas"),
@@ -522,7 +523,7 @@ fn initial_screen_reads_like_an_atlas_not_a_debug_dashboard() {
         "expected workbench to read as a pixel-textured crafting table, got: {text}"
     );
     assert!(
-        !text.contains("╔") && !text.contains("╚"),
+        !body_text.contains("╔") && !body_text.contains("╚"),
         "workbench should not rely on terminal box outlines: {text}"
     );
     assert!(
@@ -567,14 +568,14 @@ fn header_reads_as_a_sprite_hud_not_plain_status_text() {
 
     terminal.draw(|frame| app.render(frame)).unwrap();
     let lines = buffer_lines(terminal.backend().buffer());
-    let header = lines.iter().take(2).cloned().collect::<Vec<_>>().join("\n");
+    let header = header_text(&lines);
 
     assert!(
-        header.contains("▛")
-            && header.contains("▜")
+        header.contains("╔◇")
+            && header.contains("◇╗")
             && header.contains("◆")
             && header.contains("▣"),
-        "top HUD should use a framed sprite plaque for title and stats, not plain prose:\n{header}"
+        "top HUD should use a distinct alchemy title border for title and stats, not plain prose:\n{header}"
     );
     assert!(
         header.contains("LITTLE ALCHEMY") && header.contains("4 / 755"),
@@ -590,39 +591,46 @@ fn header_status_sits_inside_a_framed_plaque_not_bare_text() {
 
     terminal.draw(|frame| app.render(frame)).unwrap();
     let lines = buffer_lines(terminal.backend().buffer());
-    let status_row = &lines[1];
+    let (_, status_index) = header_row_indices(&lines);
+    let status_row = &lines[status_index];
 
     assert!(
-        status_row.contains("▌")
-            && status_row.contains("▐")
+        status_row.contains("╚∿")
+            && status_row.contains("∿╝")
             && status_row.contains("crafting table workbench"),
-        "the subtitle row should sit inside a framed sprite plaque instead of floating on the backdrop:\n{status_row}"
+        "the subtitle row should sit inside the alchemy title plaque instead of floating on the backdrop:\n{status_row}"
     );
 }
 
 #[test]
-fn header_carries_a_clear_fantasy_tui_badge() {
+fn header_carries_an_alchemy_sprite_logo_not_a_tui_badge() {
     let backend = TestBackend::new(100, 28);
     let mut terminal = Terminal::new(backend).unwrap();
     let mut app = App::new();
 
     terminal.draw(|frame| app.render(frame)).unwrap();
     let lines = buffer_lines(terminal.backend().buffer());
-    let header = lines.iter().take(2).cloned().collect::<Vec<_>>().join("\n");
-    let logo_top = find_text_position(&lines[..2], "▛▀TUI▀▜").expect("expected top of TUI logo");
+    let (title_index, status_index) = header_row_indices(&lines);
+    let header_lines = [lines[title_index].clone(), lines[status_index].clone()];
+    let header = header_lines.join("\n");
+    let logo_top =
+        find_text_position(&header_lines, "▛◢✦◣▜").expect("expected top of alchemy sprite logo");
     let logo_bottom =
-        find_text_position(&lines[..2], "▙▄▄✦▄▄▟").expect("expected bottom of TUI logo");
-    let title = find_text_position(&lines[..2], "LITTLE ALCHEMY").expect("expected title");
+        find_text_position(&header_lines, "▙◥◇◤▟").expect("expected bottom of alchemy sprite logo");
+    let title = find_text_position(&header_lines, "LITTLE ALCHEMY").expect("expected title");
 
     assert_eq!(
         logo_top.0, logo_bottom.0,
-        "header TUI logo should be a real two-row tile with aligned top and bottom, not separate centered text fragments:\n{header}"
+        "header alchemy logo should be a real two-row sprite tile with aligned top and bottom, not separate centered text fragments:\n{header}"
     );
     assert!(
-        title.0 > logo_top.0 + 8
+        title.0 > logo_top.0 + 6
+            && !header.contains("TUI")
             && !header.contains("▌ TUI ▐")
+            && header.contains("╔◇")
+            && header.contains("◇╗")
             && !header.contains("little alchemy"),
-        "header should use a clear uppercase fantasy title after the TUI tile, not a text chip or lowercase prose:\n{header}"
+        "header should use a clear uppercase fantasy title after the alchemy sprite, not a TUI badge, text chip, or lowercase prose:\n{header}"
     );
 }
 
@@ -634,7 +642,8 @@ fn header_logo_reads_like_a_centered_banner_on_wide_terminals() {
 
     terminal.draw(|frame| app.render(frame)).unwrap();
     let lines = buffer_lines(terminal.backend().buffer());
-    let title_row = &lines[0];
+    let (title_index, _) = header_row_indices(&lines);
+    let title_row = &lines[title_index];
     let left = first_non_space_column(title_row).expect("header title should render");
     let right = last_non_space_column(title_row).expect("header title should render");
     let right_pad = title_row.chars().count().saturating_sub(right + 1);
@@ -642,6 +651,37 @@ fn header_logo_reads_like_a_centered_banner_on_wide_terminals() {
     assert!(
         left >= 4 && right_pad >= 4 && left.abs_diff(right_pad) <= 3,
         "wide terminals should center the fantasy title banner instead of pinning it to the left:\n{title_row}"
+    );
+}
+
+#[test]
+fn wide_header_has_safe_top_padding_and_gap_before_workshop() {
+    let backend = TestBackend::new(160, 50);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let (title_row, status_row) = header_row_indices(&lines);
+    let workshop_row = lines
+        .iter()
+        .position(|line| line.contains("✦ workshop"))
+        .expect("expected workshop shell title");
+
+    assert!(
+        title_row >= 1,
+        "header should have a top safe-area row instead of touching terminal chrome:\n{}",
+        lines.iter().take(6).cloned().collect::<Vec<_>>().join("\n")
+    );
+    assert_eq!(
+        status_row,
+        title_row + 1,
+        "header should remain a cohesive two-row logo/title band"
+    );
+    assert!(
+        workshop_row > status_row + 1,
+        "workshop shell should leave a visual gap below the header instead of crowding or overwriting it:\n{}",
+        lines.iter().take(8).cloned().collect::<Vec<_>>().join("\n")
     );
 }
 
@@ -924,7 +964,7 @@ fn recipe_hint_lives_in_workbench_not_header_prose() {
 
     terminal.draw(|frame| app.render(frame)).unwrap();
     let lines = buffer_lines(terminal.backend().buffer());
-    let header = lines.iter().take(2).cloned().collect::<Vec<_>>().join("\n");
+    let header = header_text(&lines);
     let body = lines.iter().skip(2).cloned().collect::<Vec<_>>().join("\n");
 
     assert!(
@@ -2721,13 +2761,30 @@ fn average_background_brightness(
     }
 }
 
-fn color_brightness(color: ratatui::style::Color) -> u16 {
+const fn color_brightness(color: ratatui::style::Color) -> u16 {
     match color {
         ratatui::style::Color::Rgb(red, green, blue) => {
             (red as u16 + green as u16 + blue as u16) / 3
         }
         _ => 0,
     }
+}
+
+fn header_row_indices(lines: &[String]) -> (usize, usize) {
+    let title_row = lines
+        .iter()
+        .position(|line| line.contains("LITTLE ALCHEMY"))
+        .expect("expected alchemy title row");
+    let status_row = title_row
+        .checked_add(1)
+        .filter(|row| *row < lines.len())
+        .expect("expected alchemy status row below title");
+    (title_row, status_row)
+}
+
+fn header_text(lines: &[String]) -> String {
+    let (title_row, status_row) = header_row_indices(lines);
+    [lines[title_row].as_str(), lines[status_row].as_str()].join("\n")
 }
 
 fn first_non_space_column(line: &str) -> Option<usize> {
@@ -2760,7 +2817,7 @@ fn row_has_two_sided_title_border(row: &str, title: &str) -> bool {
     left_rails >= 2 && right_rails >= 2
 }
 
-fn is_title_border_rail(ch: char) -> bool {
+const fn is_title_border_rail(ch: char) -> bool {
     matches!(ch, '─' | '━' | '═' | '╌' | '╾' | '╼')
 }
 
