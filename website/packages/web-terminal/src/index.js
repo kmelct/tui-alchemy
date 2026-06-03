@@ -36,21 +36,13 @@ async function playBootSequence(intro, shell, instancePromise) {
   }
   const screen = intro.querySelector('pre');
   const hint = intro.querySelector('.intro-hint');
-  if (screen) {
-    screen.textContent = [
-      'POWER-ON SELF TEST',
-      'DASH:// BIOS 0.2',
-      'ARCANE MEMORY OK',
-      'MOUNTING RATATUI WORKSHOP',
-      'LOADING ALCHEMY TUI',
-    ].join('\n');
-  }
-  if (hint) hint.textContent = 'STARTING LIVE DEMO';
-  setStatus(shell, 'POST RUNNING');
+  if (screen) screen.textContent = 'loading alchemy.wasm…';
+  if (hint) hint.textContent = 'warming the cauldron';
+  setStatus(shell, 'booting');
   await instancePromise;
-  if (hint) hint.textContent = 'HANDING OFF TO RATATUI';
-  setStatus(shell, 'WORKSHOP READY');
-  await new Promise((resolve) => window.setTimeout(resolve, 220));
+  if (hint) hint.textContent = 'ready';
+  setStatus(shell, 'live');
+  await new Promise((resolve) => window.setTimeout(resolve, 180));
 }
 
 function renderFrame(term, instance) {
@@ -101,6 +93,7 @@ function bindPointer(instance, term, mount) {
     surface.setPointerCapture(event.pointerId);
     term.focus();
     updateDrag(event, 'down');
+    window.AlchemyFX?.key();
   });
 
   surface.addEventListener('pointermove', (event) => {
@@ -221,19 +214,46 @@ function bindKeyboard(instance, term) {
 
     if (changed) {
       renderFrame(term, instance);
+      window.AlchemyFX?.key();
     }
+  });
+}
+
+function waitForEl(id, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById(id);
+    if (existing) return resolve(existing);
+    const started = performance.now();
+    const timer = window.setInterval(() => {
+      const el = document.getElementById(id);
+      if (el) {
+        window.clearInterval(timer);
+        resolve(el);
+      } else if (performance.now() - started > timeoutMs) {
+        window.clearInterval(timer);
+        reject(new Error(`timeout waiting for #${id}`));
+      }
+    }, 50);
   });
 }
 
 async function bootTerminal() {
   const config = window.AlchemyTerminalWasm;
-  const mount = document.getElementById('alchemyTerminal');
-  const shell = document.getElementById('terminalShell');
+  if (!config) return;
+  // The mount point is rendered by the Dioxus app, so wait for it to appear
+  // (handles both pre-rendered markup and client-side hydration).
+  let mount;
+  let shell;
+  try {
+    mount = await waitForEl('alchemyTerminal');
+    shell = await waitForEl('terminalShell');
+  } catch (_) {
+    return;
+  }
   const intro = document.getElementById('terminalIntro');
-  if (!config || !mount || !shell) return;
 
   shell.dataset.terminalState = 'loading';
-  setStatus(shell, 'POST RUNNING');
+  setStatus(shell, 'booting');
 
   const term = new Terminal({
     allowTransparency: true,
@@ -242,7 +262,7 @@ async function bootTerminal() {
     cursorStyle: 'block',
     drawBoldTextInBrightColors: false,
     fontFamily: '"Terminus Nerd Font", "Terminus", VT323, ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: 14,
+    fontSize: 8,
     letterSpacing: 0,
     lineHeight: 1,
     scrollback: 0,
@@ -279,7 +299,7 @@ async function bootTerminal() {
     await playBootSequence(intro, shell, instancePromise);
   } catch (error) {
     shell.dataset.terminalState = 'error';
-    setStatus(shell, 'BOOT FAULT');
+    setStatus(shell, 'boot fault');
     term.write(`\r\n\x1b[31m${error.message}\x1b[0m\r\n`);
     return;
   }
@@ -299,8 +319,9 @@ async function bootTerminal() {
   }, TICK_MS);
 
   shell.dataset.terminalState = 'active';
-  setStatus(shell, 'LIVE DEMO READY');
+  setStatus(shell, 'live');
   if (intro) intro.dataset.loaded = 'true';
+  window.AlchemyFX?.boot();
   term.focus();
 }
 

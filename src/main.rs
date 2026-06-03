@@ -129,7 +129,7 @@ fn into_app_event(event: Event) -> Option<AppEvent> {
     }
 }
 
-fn into_app_modifiers(modifiers: crossterm::event::KeyModifiers) -> AppKeyModifiers {
+const fn into_app_modifiers(modifiers: crossterm::event::KeyModifiers) -> AppKeyModifiers {
     let mut out = AppKeyModifiers::NONE;
     if modifiers.contains(crossterm::event::KeyModifiers::SHIFT) {
         out = out.union(AppKeyModifiers::SHIFT);

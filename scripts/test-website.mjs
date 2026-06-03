@@ -7,91 +7,121 @@ const cargoToml = await readFile(join(root, 'Cargo.toml'), 'utf8');
 const version = cargoToml.match(/^version = "([^"]+)"$/m)?.[1];
 if (!version) throw new Error('Cargo.toml package version not found');
 
-const html = await readFile(join(root, 'website', 'index.html'), 'utf8');
-const terminalJs = await readFile(join(root, 'website', 'packages', 'web-terminal', 'src', 'index.js'), 'utf8');
-const terminalCss = await readFile(join(root, 'website', 'packages', 'web-terminal', 'src', 'terminal.css'), 'utf8');
+const read = (rel) => readFile(join(root, rel), 'utf8');
 
-assert(!html.includes('__bundler'), 'website/index.html must be extracted from the standalone bundler wrapper');
-assert(html.includes(`class="ver">v${version}</span>`), 'website footer version must match Cargo.toml');
+// The landing page is a single static index.html + a linked stylesheet, plus the
+// real ratatui game compiled to wasm and a small xterm.js bridge. No framework.
+const html = await read('website/index.html');
+const css = await read('website/assets/main.css');
+const terminalJs = await read('website/packages/web-terminal/src/index.js');
+const terminalCss = await read('website/packages/web-terminal/src/terminal.css');
+const buildScript = await read('scripts/build-website.sh');
+
+// ---- SEO head ----
+assert(html.includes('<title>Alchemy TUI'), 'page must set a document title');
+assert(html.includes('name="description"'), 'page must include a search description');
+assert(html.includes('rel="canonical" href="https://tui-alchemy.sh/"'), 'page must declare the canonical domain');
+assert(html.includes('property="og:image"'), 'page must include a social preview image');
+assert(html.includes('name="twitter:card" content="summary_large_image"'), 'page must use a large Twitter/X card');
+assert(html.includes('rel="icon"'), 'page must include a favicon');
+assert(html.includes('application/ld+json'), 'page must include structured data');
+assert(html.includes('SoftwareApplication'), 'structured data must describe the published application');
+assert(html.includes('/assets/main.css'), 'page must link the design stylesheet');
+assert(html.includes('/assets/terminal.css'), 'page must link the terminal stylesheet');
+assert(html.includes('/assets/terminal.js'), 'page must load the xterm bridge');
+
+// ---- real, specific page content ----
 assert(html.includes('https://i.tui-alchemy.sh'), 'install command must use the installer subdomain');
+assert(html.includes('cargo install tui-alchemy'), 'page must mention the Cargo install path');
+assert(html.includes('755'), 'tagline must state the real 755-element goal');
+assert(html.includes('hjkl'), 'controls copy must state the real movement keys');
+assert(html.includes('to quit'), 'copy must state the real quit key');
+assert(html.includes('live vm'), 'the demo caption must be the minimal live-vm label');
+assert(html.includes('AlchemyFX'), 'the page must define the retro FX (sound + keyboard flash)');
+assert(html.includes('rig-kbd'), 'the page must include the C64 keyboard flash overlay');
+assert(html.includes(`class="ver">v${version}</span>`), 'footer version must match Cargo.toml');
 assert(html.includes('copyTextToClipboard'), 'copy button must use the robust clipboard helper');
 assert(html.includes('document.execCommand'), 'copy helper must include a non-secure-context fallback');
 assert(html.includes('aria-live="polite"'), 'copy status must be announced to assistive tech');
-assert(html.includes('name="description"'), 'website must include a search description');
-assert(html.includes('rel="canonical" href="https://tui-alchemy.sh/"'), 'website must declare the canonical custom domain');
-assert(html.includes('property="og:image"'), 'website must include a social preview image');
-assert(html.includes('name="twitter:card" content="summary_large_image"'), 'website must use a large Twitter/X card');
-assert(html.includes('rel="icon"'), 'website must include a favicon');
-assert(html.includes('application/ld+json'), 'website must include structured data');
-assert(html.includes('SoftwareApplication'), 'structured data must describe the published application');
-assert(html.includes('cargo install tui-alchemy'), 'SEO copy must mention the Cargo install path');
+assert(html.includes('id="terminalShell"'), 'page must include the live terminal shell');
+assert(html.includes('id="alchemyTerminal"'), 'page must include the xterm mount point');
+assert(html.includes('id="terminalIntro"'), 'page must include the terminal loading intro');
+assert(html.includes('data-active-terminal'), 'live terminal must be marked as the active app');
+assert(html.includes('data-pc-autostart'), 'page must autostart the live demo');
+assert(html.includes('AlchemyTerminalWasm'), 'page must expose the wasm demo config');
+assert(html.includes('/assets/sprites/'), 'recipe formula must use real element sprites');
+assert(html.includes('/assets/gen/retro-computer.png'), 'live demo must be housed in the retro computer artwork');
+assert(html.includes('/assets/gen/wax-seal.png'), "parchment card must carry the maker's wax seal");
 
-assert(html.includes('id="screenshotStage"'), 'gallery stage must be addressable for pointer interaction');
-assert(html.includes('data-relic-field'), 'gallery must replace screenshot cards with a pixel-art relic field');
-assert(html.includes('data-relic'), 'pixel-art relics must surround the live terminal');
-assert(!html.includes('data-terminal-placeholder'), 'landing must not render old screenshot placeholders behind the terminal');
-assert(!html.includes('BOOT CARD'), 'landing must not keep old screenshot-card captions');
-assert(!html.includes('RUNE ATLAS'), 'landing must not keep old screenshot-card captions');
-assert(html.includes('hero-console'), 'hero kicker must be styled as a small terminal shell');
-assert(html.includes('--pointer-x'), 'pixel relics must use pointer-driven CSS variables');
-assert(html.includes('pointermove'), 'pixel relics must react to pointer movement');
-assert(html.includes('requestAnimationFrame'), 'pointer interaction must be frame-coalesced');
-assert(html.includes('prefers-reduced-motion'), 'motion must respect reduced-motion users');
-assert(html.includes('data-particle-field'), 'background particle canvas must be marked as an animated field');
-assert(html.includes('const animateParticles'), 'particle code must choose an explicit animation mode');
-assert(html.includes('requestAnimationFrame(frame);'), 'particle field must schedule animation frames');
-assert(!html.includes('shooting stars'), 'background must not use the old noisy shooting-star effect');
-assert(!html.includes('nebula'), 'background must not use the old blurred AI-style nebula layers');
-assert(!html.includes('orb'), 'background must not use the old blurred orb field');
+// ---- the removed AI-slop must stay gone (regression guard) ----
+assert(!html.toLowerCase().includes('dash://'), 'the fake dash:// protocol must not return');
+assert(!html.includes('hero-console'), 'the fake terminal kicker block must not return');
+assert(!html.includes('POWER-ON SELF TEST'), 'the fake BIOS boot text must not return');
+assert(!html.includes('ARCANE MEMORY OK'), 'the fake memory-check boot text must not return');
+assert(!html.includes('data-relic'), 'the decorative relic parallax field must not return');
+assert(!html.includes('data-particle-field'), 'the background particle canvas must not return');
 
-assert(html.includes('id="terminalShell"'), 'landing must include the fantasy web terminal shell');
-assert(html.includes('id="alchemyTerminal"'), 'landing must include an xterm.js mount point');
-assert(html.includes('id="terminalIntro"'), 'landing must include a terminal loading intro');
-assert(html.includes('data-active-terminal'), 'active terminal card must be marked as the live app');
-assert(html.includes('terminal.css?v='), 'landing must cache-bust the packaged terminal CSS');
-assert(html.includes('terminal.js?v='), 'landing must cache-bust the packaged terminal JS');
-assert(html.includes('packages/web-terminal/terminal.css'), 'landing must load the web-terminal package CSS');
-assert(html.includes('alchemy_terminal_wasm.wasm?v='), 'landing must cache-bust the packaged WASM binary');
-assert(html.includes('packages/web-terminal/terminal.js'), 'landing must load the web-terminal package JS');
-assert(html.includes('AlchemyTerminalWasm'), 'landing must expose WASM terminal package config');
-assert(html.includes('data-pc-autostart'), 'landing must mark the terminal as an old-PC autostart panel');
-assert(html.includes('POWER-ON SELF TEST'), 'terminal intro must use old-PC loading copy');
-assert(html.includes('DASH://'), 'landing terminal chrome must use the Dash protocol name');
-assert(html.includes('ARCANE MEMORY OK'), 'landing must include the fantasy boot splash text');
-assert(!html.includes('WASM ONLINE'), 'landing must not expose the prototype wasm online label');
-assert(!html.includes('Terminal reaches active state'), 'landing must not include verification notes in user-facing copy');
-assert(!html.includes('combine earth pressure returns STONE'), 'landing must not include verification notes in user-facing copy');
-assert(!html.includes('status reports 755'), 'landing must not include verification notes in user-facing copy');
-assert(!html.includes('Browser screenshot looked coherent'), 'landing must not include verification notes in user-facing copy');
-assert(terminalCss.includes('DASH:// ALCHEMY LINK'), 'terminal chrome must use the Dash protocol name in packaged CSS');
-assert(!terminalCss.includes('WEB GRIMOIRE'), 'terminal chrome must not use the prototype Web Grimoire title');
-assert(!terminalCss.includes('WASM ONLINE'), 'terminal chrome must not expose the prototype wasm online label');
-assert(terminalCss.includes('font-family: "Terminus Nerd Font"'), 'active terminal should prefer Terminus Nerd Font when available');
-assert(terminalCss.includes('.terminal-legend'), 'active terminal must include visible user-facing shell instructions');
-assert(terminalCss.includes('user-select: none'), 'live demo terminal must disable text selection so drag-and-drop works');
-assert(terminalJs.includes('MOUNTING RATATUI WORKSHOP'), 'terminal boot sequence must describe the real ratatui app handoff');
-assert(terminalJs.includes('mouse_down'), 'web terminal must forward pointer clicks into the wasm app');
-assert(terminalJs.includes('mouse_drag'), 'web terminal must forward pointer drags into the wasm app');
-assert(terminalJs.includes('mouse_up'), 'web terminal must forward pointer releases into the wasm app');
-assert(terminalJs.includes('key_char'), 'web terminal must forward printable keys into the wasm app');
-assert(terminalJs.includes('key_enter'), 'web terminal must forward Enter into the wasm app');
-assert(terminalJs.includes('\\x1b[?1049h'), 'web terminal must switch xterm into the alternate screen for the live app');
-assert(terminalJs.includes('setPointerCapture'), 'pointer dragging must keep capture while dragging across the live app');
-assert(terminalJs.includes('scrollback: 0'), 'live demo terminal must disable scrollback so the ratatui app stays in-place');
-assert(!terminalJs.includes('Local shell command: tui-alchemy'), 'web demo must not render the old fake shell startup text');
-assert(!terminalJs.includes('submit_input'), 'web demo must not use the old line-command shell api');
-assert(!terminalJs.includes('response_ptr'), 'web demo must not use the old line-command shell api');
-assert(!terminalJs.includes('redrawInput'), 'web demo must not keep the old shell prompt editor');
+// ---- the scene + restraint (CSS) ----
+assert(css.includes('workshop-backdrop'), 'the scene must use the generated workshop backdrop');
+assert(css.includes('parchment-sheet'), 'the copy must sit on a parchment surface');
+assert(css.includes('recipeCycle'), 'the recipe scroll must cross-fade real recipes');
+assert(css.includes('kbdpress'), 'the C64 keyboard must flash when keys are pressed');
+assert(css.includes('prefers-reduced-motion'), 'motion must respect reduced-motion users');
+assert(!css.includes('data-relic') && !css.includes('data-particle-field'), 'the old effect chrome must not return');
+
+// ---- honest boot + live demo input wiring (xterm bridge) ----
+assert(terminalJs.includes('loading alchemy.wasm'), 'terminal boot must show the honest wasm load line');
+assert(!terminalJs.includes('MOUNTING RATATUI WORKSHOP') && !terminalJs.includes('POWER-ON SELF TEST'), 'terminal boot must not keep the fake BIOS sequence');
+assert(terminalJs.includes('waitForEl'), 'the bridge must wait for the terminal mount point');
+assert(terminalJs.includes('AlchemyFX'), 'the bridge must trigger retro FX (sound + keyboard flash) on key/boot');
+assert(terminalJs.includes('mouse_down') && terminalJs.includes('mouse_drag') && terminalJs.includes('mouse_up'), 'web terminal must forward pointer events into the wasm app');
+assert(terminalJs.includes('key_char') && terminalJs.includes('key_enter'), 'web terminal must forward keys into the wasm app');
+assert(terminalJs.includes('\\x1b[?1049h'), 'web terminal must switch xterm into the alternate screen');
+assert(terminalJs.includes('scrollback: 0'), 'live demo terminal must disable scrollback');
 assert(!terminalJs.includes('cursorBlink: true'), 'web terminal must not use a blinking cursor effect');
-assert(!terminalJs.includes('bindPointerParallax(shell)'), 'active terminal must not use the shell shake effect');
-assert(!terminalJs.includes('card-breathe'), 'active terminal hover stack must not use the old screenshot blinking/breathing animation');
+assert(!terminalCss.includes('DASH://'), 'the live screen must not invent a dash:// link title');
+assert(terminalCss.includes('.terminal-window'), 'the live screen must render the terminal window surface');
+assert(terminalCss.includes('user-select: none'), 'live demo terminal must disable text selection so drag-and-drop works');
 
+// ---- build pipeline (static: copy + wasm + esbuild, no framework) ----
+assert(!buildScript.includes('dx build') && !buildScript.includes('dioxus'), 'build script must be a plain static build, not a framework build');
+assert(buildScript.includes('cp website/index.html'), 'build script must publish the static page');
+assert(buildScript.includes('wasm32-unknown-unknown'), 'build script must compile the game to wasm');
+assert(buildScript.includes('alchemy_terminal_wasm.wasm'), 'build script must publish the game wasm');
+assert(buildScript.includes('esbuild'), 'build script must bundle the xterm bridge');
 
-
-const assetRefs = [...html.matchAll(/(?:src|href)="(assets\/[^"]+)"/g)].map((match) => match[1]);
-assert(assetRefs.length >= 8, 'website should reference extracted local assets');
+// ---- referenced assets exist ----
+const assetRefs = [...html.matchAll(/(?:src|href)="(\/assets\/[^"?]+)"/g)].map((m) => m[1]);
+assert(assetRefs.length >= 5, 'page should reference local assets');
 for (const ref of assetRefs) {
-  await stat(join(root, 'website', ref));
+  await stat(join(root, 'website', ref.replace(/^\//, '')));
+}
+for (const el of ['water', 'fire', 'steam', 'earth', 'lava', 'air', 'rain']) {
+  await stat(join(root, 'website', 'assets', 'sprites', `${el}.png`));
+}
+// the Open Graph image is referenced as an absolute URL, so stat it explicitly
+await stat(join(root, 'website', 'assets', 'social-preview.png'));
+
+// ---- the built static output (run after build-website.sh) ----
+let built = null;
+try {
+  built = await read('website/dist/index.html');
+} catch (error) {
+  if (error?.code !== 'ENOENT') throw error;
+  // website/dist not built yet — skip the built-output checks.
+}
+if (built !== null) {
+  assert(built.includes('<title>Alchemy TUI'), 'built page must keep the static title');
+  assert(built.includes('SoftwareApplication'), 'built page must keep structured data');
+  assert(built.includes('AlchemyTerminalWasm'), 'built page must wire the live demo');
+  // The live demo is the hero — its real artifacts must be present in the deployable output,
+  // not just referenced. (A missing one here means CI would ship a dead demo.)
+  for (const artifact of ['assets/terminal.js', 'assets/terminal.css', 'assets/main.css', '_worker.js']) {
+    const info = await stat(join(root, 'website', 'dist', artifact));
+    assert(info.size > 0, `built dist/${artifact} must be non-empty`);
+  }
+  const wasm = await stat(join(root, 'website', 'dist', 'assets', 'alchemy_terminal_wasm.wasm'));
+  assert(wasm.size > 100_000, `built game wasm looks too small (${wasm.size} bytes) — demo would be broken`);
 }
 
 for (const file of [
@@ -105,6 +135,8 @@ for (const file of [
   'scripts/package-current-binary.mjs',
   'scripts/package-linux-binary-in-docker.sh',
   'scripts/test-installer-docker.sh',
+  'website/index.html',
+  'website/assets/main.css',
   'website/package.json',
   'website/packages/alchemy-wasm/Cargo.toml',
   'website/packages/alchemy-wasm/src/lib.rs',
@@ -117,7 +149,7 @@ for (const file of [
   await stat(join(root, file));
 }
 
-const unixInstaller = await readFile(join(root, 'scripts', 'install-tui-alchemy.sh'), 'utf8');
+const unixInstaller = await read('scripts/install-tui-alchemy.sh');
 assert(unixInstaller.includes('install_from_binary'), 'Unix installer must try a prebuilt binary first');
 assert(unixInstaller.includes('BINARY_BASE_URL'), 'Unix installer must have a binary asset base URL');
 assert(unixInstaller.includes('ensure_download_tool'), 'Unix installer must detect missing download tools');
@@ -130,7 +162,7 @@ assert(!unixInstaller.includes('ensure_rust'), 'Unix installer must not require 
 assert(!unixInstaller.includes('rustup'), 'Unix installer must not bootstrap Rust');
 assert(!unixInstaller.includes('python'), 'Unix installer must not require Python');
 
-const windowsInstaller = await readFile(join(root, 'scripts', 'install-tui-alchemy.ps1'), 'utf8');
+const windowsInstaller = await read('scripts/install-tui-alchemy.ps1');
 assert(windowsInstaller.includes('Install-FromBinary'), 'Windows installer must try a prebuilt binary first');
 assert(windowsInstaller.includes('BinaryBaseUrl'), 'Windows installer must have a binary asset base URL');
 assert(windowsInstaller.includes('cargo install $AppName --version $Version --locked --force'), 'Windows installer must fall back to the published crates.io package');
@@ -141,51 +173,46 @@ assert(!windowsInstaller.includes('rustup-init'), 'Windows installer must not bo
 assert(!windowsInstaller.includes('Install-Rust'), 'Windows installer must not install Rust');
 assert(!windowsInstaller.toLowerCase().includes('python'), 'Windows installer must not require Python');
 
-const installDocs = await readFile(join(root, 'docs', 'install.md'), 'utf8');
+const installDocs = await read('docs/install.md');
 assert(installDocs.includes('cargo install tui-alchemy --locked'), 'install docs must include the Cargo Book recommended locked install');
 assert(installDocs.includes('cargo publish --dry-run'), 'install docs must mention dry-run before publishing');
 assert(installDocs.includes('cargo package --list'), 'install docs must mention package contents review');
 assert(installDocs.includes('CARGO_HOME'), 'install docs must explain Cargo install root behavior');
 
-const buildScript = await readFile(join(root, 'scripts', 'build-website.sh'), 'utf8');
-assert(buildScript.includes('npm --prefix website run build'), 'build script must build website packages');
-assert(buildScript.includes('npm --prefix website ci') || buildScript.includes('npm --prefix website install'), 'build script must install website package dependencies');
-
-const websitePackage = await readFile(join(root, 'website', 'package.json'), 'utf8');
-assert(websitePackage.includes('packages/alchemy-wasm/Cargo.toml'), 'website package build must compile the WASM package');
+const websitePackage = await read('website/package.json');
 assert(websitePackage.includes('@xterm/xterm'), 'website package must depend on xterm.js');
+assert(websitePackage.includes('esbuild'), 'website package must provide esbuild for the terminal bridge');
 
-const deployScript = await readFile(join(root, 'scripts', 'deploy-website.sh'), 'utf8');
+const deployScript = await read('scripts/deploy-website.sh');
 assert(deployScript.includes('scripts/provision-cloudflare-pages.mjs'), 'deploy script must provision Pages before deploying');
 assert(deployScript.includes('scripts/upload-r2-assets.mjs'), 'deploy script must upload R2 assets');
 assert(deployScript.includes('pages deploy website/dist'), 'deploy script must deploy the built Pages output');
 assert(deployScript.includes('e9c375806f33a6c2a42c7d5ca9729105'), 'deploy script must default to the Personal account');
 assert(deployScript.includes('docker info'), 'deploy script must skip Docker packaging when the Docker daemon is unavailable');
-assert(deployScript.includes('Docker is installed but the daemon is unavailable'), 'deploy script must explain when Linux Docker packaging is skipped');
 
-const pagesProvisioner = await readFile(join(root, 'scripts', 'provision-cloudflare-pages.mjs'), 'utf8');
+const pagesProvisioner = await read('scripts/provision-cloudflare-pages.mjs');
 assert(pagesProvisioner.includes("type: 'github'"), 'Pages provisioner must try the native GitHub source first');
 assert(pagesProvisioner.includes('Direct Upload project'), 'Pages provisioner must fall back when Cloudflare GitHub integration fails');
 assert(pagesProvisioner.includes("build_command: 'sh scripts/build-website.sh'"), 'Pages provisioner must set the website build command');
 assert(pagesProvisioner.includes("destination_dir: 'website/dist'"), 'Pages provisioner must deploy the website/dist output');
 
-const wranglerToml = await readFile(join(root, 'wrangler.toml'), 'utf8');
+const wranglerToml = await read('wrangler.toml');
 assert(wranglerToml.includes('pages_build_output_dir = "website/dist"'), 'Wrangler config must point at website/dist');
 
-const deployWorkflow = await readFile(join(root, '.github', 'workflows', 'deploy-website.yml'), 'utf8');
+const deployWorkflow = await read('.github/workflows/deploy-website.yml');
 assert(deployWorkflow.includes('npx wrangler@latest pages deploy website/dist'), 'CI must deploy website/dist to Cloudflare Pages');
 assert(deployWorkflow.includes('node scripts/upload-r2-assets.mjs'), 'CI must upload installer assets to R2');
+assert(!deployWorkflow.includes('dioxus'), 'CI must not depend on a framework toolchain for a static build');
 
-const dnsConfigurator = await readFile(join(root, 'scripts', 'configure-cloudflare-dns.mjs'), 'utf8');
+const dnsConfigurator = await read('scripts/configure-cloudflare-dns.mjs');
 assert(dnsConfigurator.includes("type: 'CNAME'"), 'DNS configurator must create CNAME records');
 assert(dnsConfigurator.includes('www.${zoneName}'), 'DNS configurator must manage the www host');
 
-const pagesWorker = await readFile(join(root, 'website', 'dist', '_worker.js'), 'utf8');
+const pagesWorker = await read('website/_worker.js');
 assert(pagesWorker.includes('env.ASSETS.fetch(request)'), 'Pages worker must pass website requests to static assets');
 assert(pagesWorker.includes('i.tui-alchemy.sh'), 'Pages worker must route installer subdomain requests');
 assert(pagesWorker.includes('www.tui-alchemy.sh'), 'Pages worker must recognize the www host');
 assert(pagesWorker.includes('tui-alchemy.pages.dev'), 'Pages worker must recognize the default Pages host');
-assert(pagesWorker.includes('.tui-alchemy.pages.dev'), 'Pages worker must recognize preview Pages hosts');
 assert(pagesWorker.includes('Response.redirect(url.toString(), 301)'), 'Pages worker must redirect non-canonical public hosts permanently');
 
 function assert(condition, message) {

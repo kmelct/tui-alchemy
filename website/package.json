@@ -4,16 +4,13 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "build": "npm run build:wasm && npm run build:terminal",
-    "build:wasm": "CARGO_TARGET_DIR=dist/target-wasm cargo build --manifest-path packages/alchemy-wasm/Cargo.toml --target wasm32-unknown-unknown --release --locked && node packages/alchemy-wasm/copy-wasm.mjs",
-    "build:terminal": "esbuild packages/web-terminal/src/index.js --bundle --format=esm --target=es2020 --outfile=dist/packages/web-terminal/terminal.js && esbuild packages/web-terminal/src/terminal.css --bundle --minify --outfile=dist/packages/web-terminal/terminal.css",
-    "check": "node --check packages/web-terminal/src/index.js && node --check packages/alchemy-wasm/copy-wasm.mjs"
+    "check": "node --check packages/web-terminal/src/index.js"
   },
   "dependencies": {
-    "@xterm/addon-fit": "latest",
-    "@xterm/xterm": "latest"
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0"
   },
   "devDependencies": {
-    "esbuild": "latest"
+    "esbuild": "^0.28.0"
   }
 }

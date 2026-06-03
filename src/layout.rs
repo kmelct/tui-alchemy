@@ -123,21 +123,20 @@ pub(crate) fn scene_layout(area: Rect) -> SceneLayout {
     );
 
     if main.width < NARROW_BREAKPOINT {
-        // Vertical stack for narrow terminals: keep the recipe table close to
-        // the atlas instead of letting a mostly empty board consume all spare
-        // height. The board itself remains compact inside its allocated band.
-        let rail_h = 10
-            .min(main.height.saturating_sub(16))
-            .max(8)
-            .min(main.height);
-        let after_rail = main.height.saturating_sub(rail_h);
-        let grimoire_h = 12.min(after_rail.saturating_sub(6)).max(8).min(after_rail);
-        let after_grimoire = after_rail.saturating_sub(grimoire_h);
-        let board_h = if after_grimoire >= 6 {
-            after_grimoire.min(12)
-        } else {
-            after_grimoire
-        };
+        // Vertical stack for narrow / low-resolution terminals. The atlas (board)
+        // is where the player actually works, so it gets priority for the spare
+        // height; the stats rail and the recipe table stay compact instruments
+        // that never starve the atlas on small or short terminals.
+        let h = main.height;
+        // Reserve a board floor FIRST, then size the rail and recipe table from what is
+        // left, so the atlas never collapses to zero on short terminals (the rail and
+        // recipe table yield their space before the board does).
+        let board_floor = 6u16.min(h);
+        let rail_h = (h / 5).clamp(5, 8).min(h.saturating_sub(board_floor));
+        let grimoire_h = (h / 4)
+            .clamp(7, 10)
+            .min(h.saturating_sub(board_floor).saturating_sub(rail_h));
+        let board_h = h.saturating_sub(rail_h).saturating_sub(grimoire_h);
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -563,6 +562,20 @@ mod tests {
             "the recipe table should be a compact instrument inside the right column, not a full-height sidebar"
         );
         assert_eq!(grimoire.panel.y, 0);
+    }
+
+    #[test]
+    fn narrow_layout_never_starves_the_board() {
+        // Below the narrow breakpoint and at small heights, the atlas (board) must keep
+        // a usable height rather than collapsing to zero behind the rail + recipe table.
+        for height in 10..=24 {
+            let scene = scene_layout(Rect::new(0, 0, 60, height));
+            assert!(
+                scene.board.height > 0,
+                "atlas board collapsed at terminal height {height}: board.height = {}",
+                scene.board.height
+            );
+        }
     }
 }
 /// The recipe-table panel: a compact, bronze-rimmed bar holding three sockets

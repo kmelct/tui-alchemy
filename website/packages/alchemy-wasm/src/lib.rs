@@ -14,7 +14,13 @@ const DEFAULT_ROWS: u16 = 28;
 const MIN_COLS: u16 = 56;
 const MIN_ROWS: u16 = 18;
 
-const BOOT: &[u8] = b"POWER-ON SELF TEST\nDASH:// BIOS 0.2\nARCANE MEMORY OK\nMOUNTING RATATUI WORKSHOP\nLOADING ALCHEMY TUI\n";
+/// The live demo opens mid-play, on a workbench already full of discovered
+/// element sprites — far more inviting than four lonely base tiles, and it fills
+/// the screen so the board never reads as empty.
+const DEMO_SEED: &[&str] = &[
+    "Steam", "Mud", "Lava", "Rain", "Dust", "Energy", "Sea", "Cloud", "Stone", "Sand", "Metal",
+    "Plant", "Mist", "Smoke",
+];
 
 thread_local! {
     static DEMO: RefCell<DemoState> = RefCell::new(DemoState::new());
@@ -30,8 +36,10 @@ struct DemoState {
 
 impl DemoState {
     fn new() -> Self {
+        let mut app = App::new();
+        app.reveal_elements_for_preview(DEMO_SEED);
         let mut demo = Self {
-            app: App::new(),
+            app,
             cols: DEFAULT_COLS,
             rows: DEFAULT_ROWS,
             plain: String::new(),
@@ -43,6 +51,7 @@ impl DemoState {
 
     fn reset(&mut self) {
         self.app = App::new();
+        self.app.reveal_elements_for_preview(DEMO_SEED);
         self.render();
     }
 
@@ -84,16 +93,6 @@ impl DemoState {
         self.plain = buffer_to_plain(buffer);
         self.ansi = buffer_to_ansi(buffer);
     }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn boot_ptr() -> *const u8 {
-    BOOT.as_ptr()
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn boot_len() -> usize {
-    BOOT.len()
 }
 
 #[unsafe(no_mangle)]

@@ -1,101 +1,61 @@
 @import "@xterm/xterm/css/xterm.css";
 
+/* The live CRT screen. It is positioned by the page (index.html) directly over
+   the glass of the retro-computer artwork, so it carries NO frame of its own —
+   only the phosphor glow, scanlines and the terminal itself. */
 #terminalShell {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: min(98%, 900px);
-  height: min(82%, 470px);
-  z-index: 5;
   isolation: isolate;
-  transform: translate(-50%, -47%);
-  border: 2px solid #5c4226;
-  border-radius: 2px;
-  background:
-    linear-gradient(180deg, rgba(214,201,165,.10), rgba(8,9,15,0) 18%),
-    linear-gradient(90deg, rgba(186,145,88,.08), transparent 13%, transparent 87%, rgba(186,145,88,.08)),
-    radial-gradient(circle at 50% 12%, rgba(186,145,88,.18), transparent 50%),
-    #08090f;
-  box-shadow:
-    0 0 0 2px #0a0b12,
-    0 0 0 4px rgba(186,145,88,.42),
-    0 22px 54px rgba(0,0,0,.72),
-    inset 0 0 0 1px rgba(214,201,165,.08),
-    inset 0 0 28px rgba(186,145,88,.10);
   overflow: hidden;
-}
-
-#terminalShell::before {
-  content: "▛── ✦ DASH:// ALCHEMY LINK ──▜";
-  position: absolute;
-  z-index: 3;
-  left: 12px;
-  top: 8px;
-  font-family: "Terminus Nerd Font", "Press Start 2P", ui-monospace, monospace;
-  font-size: clamp(7px, .68vw, 10px);
-  color: #d2c9a5;
-  letter-spacing: .05em;
-  text-shadow: 0 0 12px rgba(214,201,122,.35);
+  background: #0a0b12;
+  border-radius: 5px / 7px;            /* faint CRT curvature */
+  box-shadow:
+    inset 0 0 14px rgba(0, 0, 0, .85),
+    inset 0 0 40px rgba(75, 114, 110, .10),
+    inset 0 0 4px rgba(214, 201, 122, .10);
 }
 
 #terminalShell::after {
+  /* screen glare in the top-left corner, like a real tube */
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 3;
   pointer-events: none;
-  z-index: 2;
-  background:
-    linear-gradient(transparent 0 50%, rgba(0,0,0,.18) 50% 100%) 0 0/100% 4px,
-    radial-gradient(circle at 50% 0, rgba(214,201,165,.10), transparent 50%);
-  mix-blend-mode: screen;
-  opacity: .34;
+  background: radial-gradient(120% 90% at 18% 8%, rgba(214, 201, 165, .07), transparent 46%);
 }
 
-.terminal-topline {
+.crt-status {
   position: absolute;
   z-index: 4;
-  right: 12px;
-  top: 8px;
-  font-family: "Terminus Nerd Font", "Silkscreen", ui-monospace, monospace;
-  font-size: clamp(8px, .72vw, 10px);
-  letter-spacing: .08em;
-  color: #d6c97a;
-  text-shadow: 0 0 10px rgba(214,201,122,.28);
+  right: 7px;
+  top: 5px;
+  font-family: "Terminus Nerd Font", "Press Start 2P", ui-monospace, monospace;
+  font-size: clamp(5px, .52vw, 7px);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #8caba1;
+  text-shadow: 0 0 8px rgba(140, 171, 161, .4);
 }
 
 .terminal-window {
   position: absolute;
-  inset: 40px 12px 36px 12px;
+  inset: 5px 6px;
   z-index: 1;
   overflow: hidden;
-  border: 1px solid rgba(92,66,38,.72);
-  background:
-    linear-gradient(180deg, rgba(214,201,165,.05), transparent 18%),
-    rgba(8,9,15,.95);
-  padding: 8px;
+  background: rgba(8, 9, 15, .96);
+  padding: 4px 5px;
 }
 
-.terminal-window::before,
-.terminal-window::after {
+.terminal-window::before {
+  /* scanlines, scoped to the screen only */
   content: "";
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
-}
-
-.terminal-window::before {
-  background:
-    linear-gradient(transparent 0 50%, rgba(214,201,165,.035) 50% 100%) 0 0/100% 3px,
-    linear-gradient(90deg, rgba(214,201,165,.12), transparent 10%, transparent 90%, rgba(214,201,165,.12));
-  opacity: .58;
-}
-
-.terminal-window::after {
-  box-shadow:
-    inset 0 0 0 1px rgba(214,201,165,.10),
-    inset 0 0 32px rgba(0,0,0,.68),
-    inset 0 0 68px rgba(186,145,88,.08);
+  background: linear-gradient(transparent 0 50%, rgba(0, 0, 0, .22) 50% 100%) 0 0 / 100% 3px;
+  opacity: .5;
+  mix-blend-mode: multiply;
 }
 
 #alchemyTerminal {
@@ -113,82 +73,60 @@
 }
 
 #alchemyTerminal .xterm {
-  text-shadow: 0 0 10px rgba(214,201,122,.16);
+  text-shadow: 0 0 8px rgba(214, 201, 122, .14);
 }
 
 #alchemyTerminal .xterm-viewport {
   background: transparent !important;
 }
 
+/* honest boot overlay — one real load line, no fake BIOS */
 .terminal-intro {
   position: absolute;
   z-index: 6;
-  inset: 40px 12px 42px 12px;
+  inset: 5px 6px;
   display: grid;
-  place-items: start stretch;
-  padding: 18px 18px 14px;
-  background:
-    linear-gradient(180deg, rgba(16,13,9,.98), rgba(8,9,15,.98));
+  place-items: center;
+  text-align: center;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(10, 11, 18, .98), rgba(8, 9, 15, .98));
   color: #d6c97a;
-  font-family: "Terminus Nerd Font", "Press Start 2P", ui-monospace, monospace;
-  font-size: clamp(8px, .78vw, 11px);
-  letter-spacing: .05em;
-  transition: opacity .28s ease, transform .28s ease, visibility .28s;
+  font-family: "Terminus Nerd Font", "VT323", ui-monospace, monospace;
+  transition: opacity .3s ease, visibility .3s;
 }
 
 .terminal-intro pre {
   margin: 0;
-  white-space: pre-wrap;
-  line-height: 1.8;
-  padding: 16px 18px;
-  border: 1px solid rgba(186,145,88,.55);
-  box-shadow: 0 0 24px rgba(186,145,88,.22), inset 0 0 18px rgba(214,201,122,.08);
-  background: rgba(6, 7, 12, .84);
+  font-size: clamp(11px, 1.3vw, 17px);
+  letter-spacing: .03em;
+  color: #d2c9a5;
 }
 
+.terminal-intro pre::after {
+  content: "▋";
+  margin-left: 2px;
+  color: #c77b58;
+  animation: crtblink 1.1s step-end infinite;
+}
+
+@keyframes crtblink { 50% { opacity: 0; } }
+
 .terminal-intro .intro-hint {
-  margin-top: auto;
-  font-family: "Terminus Nerd Font", "VT323", ui-monospace, monospace;
-  font-size: 18px;
-  color: #d2c9a5;
-  opacity: .82;
+  font-family: "Terminus Nerd Font", "Press Start 2P", ui-monospace, monospace;
+  font-size: clamp(6px, .7vw, 9px);
+  letter-spacing: .08em;
+  color: #847875;
+  text-transform: uppercase;
 }
 
 .terminal-intro[data-loaded="true"] {
   opacity: 0;
-  transform: scale(.98);
   visibility: hidden;
 }
 
-.terminal-legend {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 9px;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: #847875;
-  font-family: "Terminus Nerd Font", "VT323", ui-monospace, monospace;
-  font-size: clamp(10px, 0.98vw, 15px);
-  letter-spacing: .04em;
-}
-
-.terminal-legend b {
-  color: #d6c97a;
-  font-weight: 400;
-}
-
-[data-active-terminal] {
-  filter: drop-shadow(0 0 18px rgba(186,145,88,.14));
-}
-
-@media (max-width: 900px) {
-  #terminalShell { width: 96%; height: 82%; }
-}
+[data-active-terminal] { position: absolute; }
 
 @media (prefers-reduced-motion: reduce) {
-  #terminalShell { transition: none; }
+  .terminal-intro { transition: none; }
+  .terminal-intro pre::after { animation: none; }
 }
