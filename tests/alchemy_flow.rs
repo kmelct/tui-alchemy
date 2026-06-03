@@ -1,8 +1,8 @@
-use crossterm::event::{
-    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
-};
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Color};
 use tui_alchemy::App;
+use tui_alchemy::input_event::{
+    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 
 const fn key(code: KeyCode) -> Event {
     Event::Key(KeyEvent::new(code, KeyModifiers::NONE))

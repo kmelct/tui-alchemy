@@ -2,6 +2,15 @@
 
 All notable changes to `tui-alchemy` are tracked here. The project follows semantic versioning for release tags.
 
+## [0.2.0] - 2026-06-03
+
+### Added
+
+- Standalone marketing website under `website/` with extracted local assets and a working copy-to-clipboard install command.
+- Cloudflare Pages build and provisioning scripts for the `tui-alchemy.sh` site.
+- Public Cloudflare R2-backed installer artifacts for `i.tui-alchemy.sh`.
+- Interactive Unix and Windows installers that verify Rust toolchain requirements before installing.
+
 ## [0.1.0] - 2026-06-02
 
 ### Added

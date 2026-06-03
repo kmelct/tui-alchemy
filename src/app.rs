@@ -505,11 +505,11 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input_event::{
+        Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    };
     use crate::layout::{
         atlas_page_size, atlas_panel, board_inner, grimoire_layout, iso_board_cells, scene_layout,
-    };
-    use crossterm::event::{
-        Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     };
 
     // Indices in TEST_JSON:

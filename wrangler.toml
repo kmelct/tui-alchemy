@@ -1,0 +1,3 @@
+name = "tui-alchemy"
+pages_build_output_dir = "website/dist"
+compatibility_date = "2026-06-03"

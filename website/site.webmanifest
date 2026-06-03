@@ -1,0 +1,23 @@
+{
+  "name": "Alchemy TUI",
+  "short_name": "Alchemy TUI",
+  "description": "A terminal alchemy crafting game with pixel-art sprites and a 755-element recipe book.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0c0e16",
+  "theme_color": "#ba9158",
+  "icons": [
+    {
+      "src": "/assets/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

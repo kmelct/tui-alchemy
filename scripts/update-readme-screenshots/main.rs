@@ -9,6 +9,10 @@ use tui_alchemy::{
 };
 
 const README_PATH: &str = "README.md";
+const CARGO_TOML_PATH: &str = "Cargo.toml";
+const WEBSITE_INDEX_PATH: &str = "website/index.html";
+const UNIX_INSTALLER_PATH: &str = "scripts/install-tui-alchemy.sh";
+const WINDOWS_INSTALLER_PATH: &str = "scripts/install-tui-alchemy.ps1";
 const SCREENSHOTS_DIR: &str = "docs/screenshots";
 const BG: Rgba<u8> = Rgba([7, 16, 18, 255]);
 const OUTER_RIM: Rgba<u8> = Rgba([170, 124, 54, 255]);
@@ -87,12 +91,137 @@ fn update_readme_screenshots() -> Result<(), Box<dyn Error>> {
 }
 
 fn update_readme_markdown() -> Result<(), Box<dyn Error>> {
+    let version = crate_version()?;
     let readme = fs::read_to_string(README_PATH)?;
     let readme = replace_marked_section(&readme, "readme-hero", &hero_markdown())?;
     let readme =
         replace_marked_section(&readme, "readme-screenshots", &interaction_flow_markdown())?;
-    fs::write(README_PATH, readme)?;
+    fs::write(README_PATH, update_readme_version_text(&readme, &version))?;
+    update_versioned_project_files(&version)?;
     Ok(())
+}
+
+fn crate_version() -> Result<String, Box<dyn Error>> {
+    let cargo_toml = fs::read_to_string(CARGO_TOML_PATH)?;
+    for line in cargo_toml.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("version = \"") {
+            if let Some(version) = rest.strip_suffix('"') {
+                return Ok(version.to_owned());
+            }
+        }
+    }
+    Err("missing package version in Cargo.toml".into())
+}
+
+fn update_versioned_project_files(version: &str) -> Result<(), Box<dyn Error>> {
+    update_file_text(WEBSITE_INDEX_PATH, |content| {
+        update_website_version_text(content, version)
+    })?;
+    update_file_text(UNIX_INSTALLER_PATH, |content| {
+        update_unix_installer_version_text(content, version)
+    })?;
+    update_file_text(WINDOWS_INSTALLER_PATH, |content| {
+        update_windows_installer_version_text(content, version)
+    })?;
+    Ok(())
+}
+
+fn update_file_text(
+    path: &str,
+    updater: impl FnOnce(&str) -> String,
+) -> Result<(), Box<dyn Error>> {
+    let content = fs::read_to_string(path)?;
+    let next = updater(&content);
+    if next != content {
+        fs::write(path, next)?;
+    }
+    Ok(())
+}
+
+fn update_readme_version_text(readme: &str, version: &str) -> String {
+    let readme = replace_between_first(
+        readme,
+        "https://img.shields.io/badge/release-v",
+        "-blue",
+        version,
+    );
+    let readme = replace_between_first(&readme, "`docs/release-v", ".md`", version);
+    replace_section_between(
+        &readme,
+        "## Quick start\n",
+        "\n## How the screen works",
+        &quick_start_markdown(),
+    )
+}
+
+fn update_website_version_text(html: &str, version: &str) -> String {
+    replace_between_first(html, "class=\"ver\">v", "</span>", version)
+}
+
+fn update_unix_installer_version_text(script: &str, version: &str) -> String {
+    replace_between_first(
+        script,
+        "APP_VERSION=\"${TUI_ALCHEMY_VERSION:-",
+        "}\"",
+        version,
+    )
+}
+
+fn update_windows_installer_version_text(script: &str, version: &str) -> String {
+    replace_between_first(
+        script,
+        "if ([string]::IsNullOrWhiteSpace($Version)) { $Version = \"",
+        "\" }",
+        version,
+    )
+}
+
+fn quick_start_markdown() -> String {
+    "Install the latest release:\n\n```sh\ncurl -fsSL https://i.tui-alchemy.sh | sh\n```\n\nThen run:\n\n```sh\ntui-alchemy\n```\n\nCommand-line help and package metadata:\n\n```sh\ntui-alchemy --help\ntui-alchemy --version\n```\n\nFor local development from this repository:\n\n```sh\ncargo run\n```\n\nPress `q` to quit.\n".to_owned()
+}
+
+fn replace_between_first(source: &str, prefix: &str, suffix: &str, replacement: &str) -> String {
+    let Some(start) = source.find(prefix) else {
+        return source.to_owned();
+    };
+    let value_start = start + prefix.len();
+    let Some(end_offset) = source[value_start..].find(suffix) else {
+        return source.to_owned();
+    };
+    let value_end = value_start + end_offset;
+
+    let mut next = String::with_capacity(source.len() + replacement.len());
+    next.push_str(&source[..value_start]);
+    next.push_str(replacement);
+    next.push_str(&source[value_end..]);
+    next
+}
+
+fn replace_section_between(
+    source: &str,
+    start_marker: &str,
+    end_marker: &str,
+    replacement: &str,
+) -> String {
+    let Some(start) = source.find(start_marker) else {
+        return source.to_owned();
+    };
+    let content_start = start + start_marker.len();
+    let Some(end_offset) = source[content_start..].find(end_marker) else {
+        return source.to_owned();
+    };
+    let content_end = content_start + end_offset;
+
+    let mut next = String::with_capacity(source.len() + replacement.len());
+    next.push_str(&source[..content_start]);
+    next.push('\n');
+    next.push_str(replacement);
+    if !replacement.ends_with('\n') {
+        next.push('\n');
+    }
+    next.push_str(&source[content_end..]);
+    next
 }
 
 fn save_scene(
@@ -357,6 +486,17 @@ mod tests {
             next,
             "before\n<!-- readme-screenshots:start -->\nfresh\n<!-- readme-screenshots:end -->\nafter\n"
         );
+    }
+
+    #[test]
+    fn readme_version_update_rewrites_release_badge_and_quick_install() {
+        let readme = "<a href=\"https://github.com/kmelct/tui-alchemy/releases\"><img alt=\"Release\" src=\"https://img.shields.io/badge/release-v0.1.0-blue\"></a>\n## Quick start\n\n```sh\ncargo run\n```\n\n## How the screen works\nRelease notes: `docs/release-v0.1.0.md`\n";
+        let next = super::update_readme_version_text(readme, "0.2.0");
+
+        assert!(next.contains("release-v0.2.0-blue"));
+        assert!(next.contains("curl -fsSL https://i.tui-alchemy.sh | sh"));
+        assert!(next.contains("docs/release-v0.2.0.md"));
+        assert!(!next.contains("release-v0.1.0-blue"));
     }
 
     #[test]

@@ -5,3 +5,8 @@ __pycache__/
 /output/
 /.remember/
 /.junie/
+/website/dist/
+/.wrangler/
+/scripts/update-readme-screenshots/target/
+/website/node_modules/
+/website/packages/alchemy-wasm/target/

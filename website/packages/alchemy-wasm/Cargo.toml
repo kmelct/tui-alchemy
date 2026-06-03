@@ -1,0 +1,21 @@
+[package]
+name = "alchemy-terminal-wasm"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.88"
+description = "WebAssembly runtime that renders the real Alchemy TUI app inside xterm.js."
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ratatui = { version = "0.30", default-features = false, features = ["std", "all-widgets", "macros", "layout-cache", "underline-color"] }
+tui-alchemy = { path = "../../.." }
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

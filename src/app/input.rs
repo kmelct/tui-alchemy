@@ -1,10 +1,10 @@
 use super::{App, HitTarget};
 use crate::app::{DragOrigin, DragState};
+use crate::input_event::{Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use crate::layout::{
     atlas_page_count, atlas_page_size, atlas_panel, atlas_tab_rects, board_inner, contains,
     grimoire_layout, iso_board_cells, iso_columns, iso_hit, scene_layout,
 };
-use crossterm::event::{Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 
 impl App {
     pub fn handle_event(&mut self, event: Event) {

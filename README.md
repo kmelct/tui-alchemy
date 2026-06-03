@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kmelct/tui-alchemy/releases"><img alt="Release" src="https://img.shields.io/badge/release-v0.1.0-blue"></a>
+  <a href="https://github.com/kmelct/tui-alchemy/releases"><img alt="Release" src="https://img.shields.io/badge/release-v0.2.0-blue"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
   <img alt="Rust" src="https://img.shields.io/badge/rust-1.88%2B-orange">
   <img alt="Terminal UI" src="https://img.shields.io/badge/ui-ratatui-purple">
@@ -60,15 +60,31 @@ Every discovery is added to the atlas immediately, so the puzzle expands from fo
 
 ## Quick start
 
+Install the latest release:
+
 ```sh
-cargo run
+curl -fsSL https://i.tui-alchemy.sh | sh
+```
+
+The installer uses prebuilt binaries first, so Rust, Cargo, Python, Git, and a compiler toolchain are not required. It checks for small runtime tools such as `tar` plus `curl` or `wget`; when one is missing, it asks before installing it with the available package manager. If you already have Cargo, the published package is also available with `cargo install tui-alchemy --locked`; see [`docs/install.md`](docs/install.md).
+
+Then run:
+
+```sh
+tui-alchemy
 ```
 
 Command-line help and package metadata:
 
 ```sh
-cargo run -- --help
-cargo run -- --version
+tui-alchemy --help
+tui-alchemy --version
+```
+
+For local development from this repository:
+
+```sh
+cargo run
 ```
 
 Press `q` to quit.
@@ -168,7 +184,9 @@ assets/pixel-sprites/   Runtime pixel-art sprite atlas and manifest
 data/little_alchemy.json
                         Canonical 755-element recipe catalog
 docs/screenshots/       Curated screenshots used by this README and release notes
+scripts/                Screenshot, website build, installer, and Cloudflare deployment scripts
 tests/                  Gameplay, layout, rendering, and regression tests
+website/                Standalone site source for tui-alchemy.sh
 ```
 
 ## Maintain the project
@@ -196,6 +214,30 @@ scripts/update-readme-screenshots.sh
 
 The script renders fresh README images into `docs/screenshots/` and refreshes the marked screenshot sections in this file.
 
+### Website build
+
+The standalone site lives in `website/`. Build the Cloudflare Pages output locally with:
+
+```sh
+scripts/build-website.sh
+node scripts/test-website.mjs
+```
+
+The install button copies:
+
+```sh
+curl -fsSL https://i.tui-alchemy.sh | sh
+```
+
+For Cloudflare Pages, custom domains, R2 provisioning, and one-time DNS setup, copy `.env.example` to `.env`, fill the tokens, then run:
+
+```sh
+scripts/deploy-website.sh
+node scripts/configure-cloudflare-dns.mjs
+```
+
+Pushes to `master` run the same website build and deploy path through `.github/workflows/deploy-website.yml`.
+
 ### Package check
 
 Before a release, verify crate metadata and included files:
@@ -210,12 +252,13 @@ cargo package
 1. Update `version` in `Cargo.toml`.
 2. Add a matching entry to `CHANGELOG.md`.
 3. Regenerate README screenshots with `scripts/update-readme-screenshots.sh`.
-4. Review the updated images in `docs/screenshots/`.
-5. Run `cargo test`.
-6. Run `cargo ci-clippy`.
-7. Run `cargo package`.
-8. Commit the release changes.
-9. Tag the release commit, push it, and create the GitHub release from `docs/release-v0.1.0.md`.
+4. Build and test the website with `scripts/build-website.sh` and `node scripts/test-website.mjs`.
+5. Review the updated images in `docs/screenshots/`.
+6. Run `cargo test`.
+7. Run `cargo ci-clippy`.
+8. Run `cargo package`.
+9. Commit the release changes.
+10. Tag the release commit, push it, and create the GitHub release from `docs/release-v0.2.0.md`.
 
 ## License
 
