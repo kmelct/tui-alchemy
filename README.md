@@ -1,6 +1,6 @@
 <h1 align="center">Alchemy TUI</h1>
 <p align="center">
-  <strong>A terminal alchemy crafting game with a 755-element recipe book, Ratatui UI, and pixel-art sprites.</strong>
+  <strong>A terminal alchemy crafting game with a 755-element recipe book, and pixel-art sprites.</strong>
 </p>
 
 <p align="center">
