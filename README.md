@@ -6,13 +6,15 @@
 <p align="center">
   <a href="https://github.com/kmelct/tui-alchemy/releases"><img alt="Release" src="https://img.shields.io/badge/release-v0.1.0-blue"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
-  <img alt="Rust" src="https://img.shields.io/badge/rust-1.87%2B-orange">
+  <img alt="Rust" src="https://img.shields.io/badge/rust-1.88%2B-orange">
   <img alt="Terminal UI" src="https://img.shields.io/badge/ui-ratatui-purple">
 </p>
 
+<!-- readme-hero:start -->
 <p align="center">
-  <img alt="Fresh tui-alchemy game showing starter elements and the recipe workbench" src="docs/screenshots/01-initial.png">
+  <img alt="Alchemy TUI workbench with Water and Fire resolving into Steam" src="docs/screenshots/hero.png">
 </p>
+<!-- readme-hero:end -->
 
 ## Table of contents
 
@@ -73,13 +75,17 @@ Press `q` to quit.
 
 ## How the screen works
 
+<!-- readme-screenshots:start -->
 Use it as a three-step loop: **select an element → select a second element → get a result**.
 
-| 1. Select an element | 2. Select a second | 3. Get the result |
-| --- | --- | --- |
-| <img alt="Starter atlas with Air, Earth, Fire, and Water" src="docs/screenshots/01-initial.png" width="300"> | <img alt="Dragging an ingredient toward the workbench" src="docs/screenshots/03-drag-ghost.png" width="300"> | <img alt="Water and Fire resolve into Steam" src="docs/screenshots/02-created-steam.png" width="300"> |
+<p align="center">
+  <img alt="Water selected in the workbench" src="docs/screenshots/01-select-element.png" width="31%">
+  <img alt="Fire being dragged as the second ingredient" src="docs/screenshots/02-select-second.png" width="31%">
+  <img alt="Water and Fire resolving into Steam" src="docs/screenshots/03-get-result.png" width="31%">
+</p>
 
 The left rail tracks progress, the center atlas holds discovered ingredients, and the right workbench resolves `ingredient + ingredient = result`.
+<!-- readme-screenshots:end -->
 
 ## How to play
 
@@ -111,7 +117,7 @@ The left rail tracks progress, the center atlas holds discovered ingredients, an
 4. If the pair is a recipe, the result appears and joins the atlas.
 
 <p align="center">
-  <img alt="Drag ghost over the atlas while Steam is selected" src="docs/screenshots/03-drag-ghost.png">
+  <img alt="Fire being dragged as the second ingredient" src="docs/screenshots/02-select-second.png">
 </p>
 
 ## Tutorial: make Steam
@@ -125,7 +131,7 @@ Start from a fresh game:
 5. `Steam` is added to the atlas and can be used in later recipes.
 
 <p align="center">
-  <img alt="Steam discovered after combining Water and Fire" src="docs/screenshots/02-created-steam.png">
+  <img alt="Steam discovered after combining Water and Fire" src="docs/screenshots/03-get-result.png">
 </p>
 
 After Steam, keep branching through low-level recipes:
@@ -185,10 +191,10 @@ Runtime sprites are checked in under `assets/pixel-sprites/`. Treat them as rele
 Run this after UI, layout, theme, sprite-fit, visual-effect, or renderer changes:
 
 ```sh
-cargo run --example screenshot
+scripts/update-readme-screenshots.sh
 ```
 
-The command writes fresh images to `output/screenshot/`. Copy release-quality images into `docs/screenshots/` so GitHub README screenshots stay current.
+The script renders fresh README images into `docs/screenshots/` and refreshes the marked screenshot sections in this file.
 
 ### Package check
 
@@ -203,8 +209,8 @@ cargo package
 
 1. Update `version` in `Cargo.toml`.
 2. Add a matching entry to `CHANGELOG.md`.
-3. Regenerate screenshots with `cargo run --example screenshot`.
-4. Copy curated screenshots into `docs/screenshots/`.
+3. Regenerate README screenshots with `scripts/update-readme-screenshots.sh`.
+4. Review the updated images in `docs/screenshots/`.
 5. Run `cargo test`.
 6. Run `cargo ci-clippy`.
 7. Run `cargo package`.

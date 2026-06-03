@@ -47,6 +47,26 @@ fn keyboard_pairing_discovers_steam_in_the_workbench() {
         "expected progress 5/755 after steam: {text}"
     );
 }
+#[test]
+fn selecting_one_element_keeps_result_slot_empty() {
+    let backend = TestBackend::new(100, 28);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    app.handle_event(key(KeyCode::Char('4')));
+
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let lines = buffer_lines(terminal.backend().buffer());
+    let water_mentions = find_all_text_positions(&lines, "water");
+
+    assert_eq!(
+        water_mentions.len(),
+        2,
+        "single selection should show water in the atlas and first ingredient slot only, not in the result slot:\n{}",
+        lines.join("\n")
+    );
+}
 
 #[test]
 fn dragging_base_elements_into_the_workbench_discovers_steam() {

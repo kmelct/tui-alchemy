@@ -2,7 +2,7 @@
 name = "tui-alchemy"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.88"
 authors = ["kmelct"]
 description = "A terminal alchemy crafting game with Ratatui UI, pixel-art sprites, and a 755-element recipe book."
 readme = "README.md"
@@ -21,7 +21,7 @@ include = [
     "/assets/pixel-sprites/**",
     "/data/little_alchemy.json",
     "/docs/**",
-    "/examples/*.rs",
+    "/scripts/**",
     "/tests/*.rs",
     "/src/**",
 ]

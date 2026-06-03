@@ -1,0 +1,19 @@
+[package]
+name = "update-readme-screenshots"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+
+[[bin]]
+name = "update-readme-screenshots"
+path = "main.rs"
+
+[dependencies]
+crossterm = "0.29"
+image = "0.25.10"
+ratatui = "0.30"
+tui-alchemy = { path = "../.." }
+
+[lints.clippy]
+nursery = { level = "deny", priority = -1 }

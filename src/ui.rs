@@ -817,8 +817,7 @@ fn render_grimoire(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let result_index = app
         .active_banner_highlight()
         .or_else(|| state.recent.front().copied())
-        .or_else(|| state.recipe_preview.map(|recipe| recipe.result))
-        .or_else(|| state.selected.iter().flatten().copied().next());
+        .or_else(|| state.recipe_preview.map(|recipe| recipe.result));
     let left_input = state
         .selected
         .first()

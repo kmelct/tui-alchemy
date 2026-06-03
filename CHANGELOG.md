@@ -14,14 +14,20 @@ All notable changes to `tui-alchemy` are tracked here. The project follows seman
 - Tutorial README with curated screenshots and maintenance instructions.
 - Package metadata for GitHub and crate packaging.
 - Release instructions in `CLAUDE.md`.
+- Standalone README screenshot updater under `scripts/`.
 
 ### Fixed
 
 - PNG screenshot rendering now initializes empty buffers with the opaque scene background instead of transparent pixels.
+- Workbench result slots stay empty until a pair resolves, so single-selection screenshots no longer imply a result.
+
+### Removed
+
+- Preview-only `examples/` and unsupported Python tooling.
 
 ### Verified release lanes
 
 - `cargo test`
 - `cargo ci-clippy`
-- `cargo run --example screenshot`
+- `scripts/update-readme-screenshots.sh`
 - `cargo package`

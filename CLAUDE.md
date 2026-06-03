@@ -20,14 +20,12 @@ When preparing a full release, do not stop at documentation or tests. Complete t
    - `include`
 4. Update `CHANGELOG.md` with the release entry.
 5. Update `docs/release-vX.Y.Z.md` with GitHub release notes and screenshot links.
-6. Regenerate visual evidence:
+6. Regenerate README and release screenshots:
 
    ```sh
-   cargo run --example screenshot
+   scripts/update-readme-screenshots.sh
    ```
-
-7. Copy curated release screenshots from `output/screenshot/` into `docs/screenshots/`.
-8. Run the verification lane:
+7. Run the verification lane:
 
    ```sh
    cargo test
@@ -35,16 +33,16 @@ When preparing a full release, do not stop at documentation or tests. Complete t
    cargo package
    ```
 
-9. Verify CLI metadata:
+8. Verify CLI metadata:
 
    ```sh
    cargo run -- --help
    cargo run -- --version
    ```
 
-10. Commit all intended release changes.
-11. Push the branch to GitHub.
-12. Create the GitHub release draft:
+9. Commit all intended release changes.
+10. Push the branch to GitHub.
+11. Create the GitHub release draft:
 
     ```sh
     git tag vX.Y.Z
@@ -57,5 +55,6 @@ When preparing a full release, do not stop at documentation or tests. Complete t
 - Do not publish with failing tests, Clippy warnings, dirty screenshots, stale release notes, or package warnings.
 - Do not use `--allow-dirty` for the final package verification after committing; it is only acceptable for pre-commit checks.
 - Keep screenshots deterministic and checked in only under `docs/screenshots/` for README and release use.
+- README screenshot automation belongs under `scripts/`; do not add screenshot-maintenance binaries or modules under `src/`.
 - Runtime data source is `data/little_alchemy.json`; do not reintroduce legacy catalog files.
 - Runtime sprites come from `assets/pixel-sprites/`; do not reintroduce SVG runtime rendering dependencies.

@@ -15,13 +15,13 @@
 
 ## Screenshots
 
-Fresh game:
+Hero:
 
-![Fresh game](https://github.com/kmelct/tui-alchemy/raw/v0.1.0/docs/screenshots/01-initial.png)
+![Alchemy TUI hero](https://github.com/kmelct/tui-alchemy/raw/v0.1.0/docs/screenshots/hero.png)
 
 First discovery:
 
-![Steam discovered](https://github.com/kmelct/tui-alchemy/raw/v0.1.0/docs/screenshots/02-created-steam.png)
+![Steam discovered](https://github.com/kmelct/tui-alchemy/raw/v0.1.0/docs/screenshots/03-get-result.png)
 
 Populated atlas:
 
@@ -47,7 +47,7 @@ Run these commands from the repository root:
 ```sh
 cargo test
 cargo ci-clippy
-cargo run --example screenshot
+scripts/update-readme-screenshots.sh
 cargo package
 ```
 
