@@ -7,12 +7,7 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use std::error::Error;
 use std::io;
 use std::time::{Duration, Instant};
-use tui_alchemy::input_event::{
-    Event as AppEvent, KeyCode as AppKeyCode, KeyEvent as AppKeyEvent,
-    KeyModifiers as AppKeyModifiers, MouseButton as AppMouseButton, MouseEvent as AppMouseEvent,
-    MouseEventKind as AppMouseEventKind,
-};
-use tui_alchemy::{App, about};
+use tui_alchemy::{App, about, input_event::Event as AppEvent};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args_os();
@@ -64,88 +59,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     result
 }
 
-fn into_app_event(event: Event) -> Option<AppEvent> {
-    match event {
-        Event::Key(key) => Some(AppEvent::Key(AppKeyEvent::new(
-            match key.code {
-                KeyCode::Up => AppKeyCode::Up,
-                KeyCode::Down => AppKeyCode::Down,
-                KeyCode::Left => AppKeyCode::Left,
-                KeyCode::Right => AppKeyCode::Right,
-                KeyCode::PageUp => AppKeyCode::PageUp,
-                KeyCode::PageDown => AppKeyCode::PageDown,
-                KeyCode::Home => AppKeyCode::Home,
-                KeyCode::End => AppKeyCode::End,
-                KeyCode::Esc => AppKeyCode::Esc,
-                KeyCode::Enter => AppKeyCode::Enter,
-                KeyCode::Backspace => AppKeyCode::Backspace,
-                KeyCode::Char(ch) => AppKeyCode::Char(ch),
-                _ => return None,
-            },
-            into_app_modifiers(key.modifiers),
-        ))),
-        Event::Mouse(mouse) => Some(AppEvent::Mouse(AppMouseEvent {
-            kind: match mouse.kind {
-                crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
-                    AppMouseEventKind::Down(AppMouseButton::Left)
-                }
-                crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Right) => {
-                    AppMouseEventKind::Down(AppMouseButton::Right)
-                }
-                crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Middle) => {
-                    AppMouseEventKind::Down(AppMouseButton::Middle)
-                }
-                crossterm::event::MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
-                    AppMouseEventKind::Up(AppMouseButton::Left)
-                }
-                crossterm::event::MouseEventKind::Up(crossterm::event::MouseButton::Right) => {
-                    AppMouseEventKind::Up(AppMouseButton::Right)
-                }
-                crossterm::event::MouseEventKind::Up(crossterm::event::MouseButton::Middle) => {
-                    AppMouseEventKind::Up(AppMouseButton::Middle)
-                }
-                crossterm::event::MouseEventKind::Drag(crossterm::event::MouseButton::Left) => {
-                    AppMouseEventKind::Drag(AppMouseButton::Left)
-                }
-                crossterm::event::MouseEventKind::Drag(crossterm::event::MouseButton::Right) => {
-                    AppMouseEventKind::Drag(AppMouseButton::Right)
-                }
-                crossterm::event::MouseEventKind::Drag(crossterm::event::MouseButton::Middle) => {
-                    AppMouseEventKind::Drag(AppMouseButton::Middle)
-                }
-                crossterm::event::MouseEventKind::ScrollDown => AppMouseEventKind::ScrollDown,
-                crossterm::event::MouseEventKind::ScrollUp => AppMouseEventKind::ScrollUp,
-                crossterm::event::MouseEventKind::Moved => AppMouseEventKind::Moved,
-                _ => return None,
-            },
-            column: mouse.column,
-            row: mouse.row,
-            modifiers: into_app_modifiers(mouse.modifiers),
-        })),
-        Event::Resize(width, height) => Some(AppEvent::Resize(width, height)),
-        Event::FocusGained => Some(AppEvent::FocusGained),
-        Event::FocusLost => Some(AppEvent::FocusLost),
-        Event::Paste(_) => Some(AppEvent::Paste(())),
-    }
-}
-
-const fn into_app_modifiers(modifiers: crossterm::event::KeyModifiers) -> AppKeyModifiers {
-    let mut out = AppKeyModifiers::NONE;
-    if modifiers.contains(crossterm::event::KeyModifiers::SHIFT) {
-        out = out.union(AppKeyModifiers::SHIFT);
-    }
-    if modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
-        out = out.union(AppKeyModifiers::CONTROL);
-    }
-    if modifiers.contains(crossterm::event::KeyModifiers::ALT) {
-        out = out.union(AppKeyModifiers::ALT);
-    }
-    if modifiers.contains(crossterm::event::KeyModifiers::SUPER) {
-        out = out.union(AppKeyModifiers::SUPER);
-    }
-    out
-}
-
 fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
@@ -170,7 +83,7 @@ fn run(
                 match event::read()? {
                     Event::Key(key) if key.code == KeyCode::Char('q') => return Ok(()),
                     event => {
-                        if let Some(event) = into_app_event(event) {
+                        if let Some(event) = AppEvent::from_crossterm(event) {
                             app.handle_event(event);
                             redraw = true;
                         }
