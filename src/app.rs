@@ -7,7 +7,9 @@ use crate::layout::{atlas_page_size, atlas_page_start, scene_layout};
 use crate::ui;
 use ratatui::Frame;
 use ratatui::layout::Rect;
-pub(crate) use state::{Banner, CatalogState, DragOrigin, DragState, RecipePreview};
+pub(crate) use state::{
+    Banner, CatalogState, DragOrigin, DragState, MenuItem, MenuView, RecipePreview,
+};
 
 #[derive(Debug, Clone, Copy)]
 enum HitTarget {
@@ -21,6 +23,8 @@ pub struct App {
     pub(crate) states: Vec<CatalogState>,
     pub(crate) active_catalog: usize,
     pub(crate) tick_counter: u64,
+    pub(crate) menu_view: MenuView,
+    pub(crate) menu_item: MenuItem,
     viewport: Rect,
 }
 
@@ -42,6 +46,8 @@ impl App {
             states,
             active_catalog: 0,
             tick_counter: 0,
+            menu_view: MenuView::Closed,
+            menu_item: MenuItem::Resume,
             viewport: Rect::new(0, 0, 0, 0),
         }
     }
@@ -160,6 +166,60 @@ impl App {
 
     pub(crate) fn active_drag(&self) -> Option<DragState> {
         self.active_state().drag
+    }
+
+    pub(crate) const fn menu_view(&self) -> MenuView {
+        self.menu_view
+    }
+
+    pub(crate) const fn menu_item(&self) -> MenuItem {
+        self.menu_item
+    }
+
+    fn open_menu(&mut self) {
+        self.menu_view = MenuView::Main;
+        self.menu_item = MenuItem::Resume;
+        self.active_state_mut().drag = None;
+    }
+
+    const fn close_menu(&mut self) {
+        self.menu_view = MenuView::Closed;
+        self.menu_item = MenuItem::Resume;
+    }
+
+    fn move_menu_item(&mut self, delta: isize) {
+        if self.menu_view == MenuView::Main {
+            self.menu_item = self.menu_item.move_by(delta);
+        }
+    }
+
+    const fn open_menu_parent(&mut self) {
+        match self.menu_view {
+            MenuView::Closed => {}
+            MenuView::Main => self.close_menu(),
+            MenuView::Controls | MenuView::ResetConfirm => self.menu_view = MenuView::Main,
+        }
+    }
+
+    fn activate_menu_item(&mut self) {
+        match self.menu_view {
+            MenuView::Closed => {}
+            MenuView::Main => match self.menu_item {
+                MenuItem::Resume => self.close_menu(),
+                MenuItem::Controls => self.menu_view = MenuView::Controls,
+                MenuItem::ResetGame => self.menu_view = MenuView::ResetConfirm,
+            },
+            MenuView::Controls => self.menu_view = MenuView::Main,
+            MenuView::ResetConfirm => self.reset_active_game(),
+        }
+    }
+
+    fn reset_active_game(&mut self) {
+        let catalog_index = self.active_catalog;
+        self.states[catalog_index] = CatalogState::new(&self.catalogs[catalog_index]);
+        self.states[catalog_index].banner = Some(Banner::new("game reset", 6, None));
+        self.close_menu();
+        self.sync_active_palette_page_to_cursor();
     }
 
     fn drop_element_into_slot(&mut self, element_index: usize, slot: usize) {
@@ -633,6 +693,24 @@ mod tests {
         let preview = app.active_state().recipe_preview.expect("preview set");
         assert_eq!(preview.result, STEAM);
         assert_eq!(app.active_state().selected, [Some(WATER), Some(FIRE)]);
+    }
+
+    #[test]
+    fn menu_reset_restores_the_current_book_to_a_fresh_game() {
+        let mut app = app();
+        app.combine_two_elements(WATER, FIRE);
+        assert!(discovered(&app, STEAM));
+
+        app.handle_event(key(KeyCode::Char('m')));
+        app.handle_event(key(KeyCode::Down));
+        app.handle_event(key(KeyCode::Down));
+        app.handle_event(key(KeyCode::Enter));
+        app.handle_event(key(KeyCode::Enter));
+
+        assert_eq!(app.active_discovered_count(), 4);
+        assert!(!discovered(&app, STEAM));
+        assert_eq!(app.active_state().selected, [None, None]);
+        assert_eq!(app.active_banner_text(), Some("game reset"));
     }
 
     #[test]

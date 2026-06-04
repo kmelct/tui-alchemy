@@ -23,6 +23,49 @@ pub struct RecipePreview {
     pub result: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuView {
+    Closed,
+    Main,
+    Controls,
+    ResetConfirm,
+}
+
+impl MenuView {
+    pub const fn is_open(self) -> bool {
+        !matches!(self, Self::Closed)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuItem {
+    Resume,
+    Controls,
+    ResetGame,
+}
+
+impl MenuItem {
+    const ALL: [Self; 3] = [Self::Resume, Self::Controls, Self::ResetGame];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Resume => "resume",
+            Self::Controls => "controls",
+            Self::ResetGame => "reset game",
+        }
+    }
+
+    pub fn move_by(self, delta: isize) -> Self {
+        let current = Self::ALL
+            .iter()
+            .position(|item| *item == self)
+            .unwrap_or_default() as isize;
+        let max = Self::ALL.len().saturating_sub(1) as isize;
+        let next = current.saturating_add(delta).clamp(0, max) as usize;
+        Self::ALL[next]
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Banner {
     pub text: String,

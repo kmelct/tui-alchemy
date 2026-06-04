@@ -20,6 +20,11 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
+        if self.menu_view.is_open() {
+            self.handle_menu_key(key);
+            return;
+        }
+
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.move_palette_cursor(-(self.inventory_columns().max(1) as isize))
@@ -35,6 +40,7 @@ impl App {
             KeyCode::End => self.move_palette_cursor_to_end(),
             KeyCode::Esc => self.active_state_mut().clear_selection(),
             KeyCode::Enter => self.select_cursor_element(),
+            KeyCode::Char('m' | 'M') if key.modifiers.is_empty() => self.open_menu(),
             KeyCode::Char(ch) if key.modifiers.is_empty() => {
                 if let Some(digit) = ch.to_digit(10) {
                     if (1..=9).contains(&digit) {
@@ -52,7 +58,22 @@ impl App {
         }
     }
 
+    fn handle_menu_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Backspace => self.open_menu_parent(),
+            KeyCode::Enter => self.activate_menu_item(),
+            KeyCode::Up | KeyCode::Char('k') => self.move_menu_item(-1),
+            KeyCode::Down | KeyCode::Char('j') => self.move_menu_item(1),
+            KeyCode::Char('m' | 'M') if key.modifiers.is_empty() => self.close_menu(),
+            _ => {}
+        }
+    }
+
     fn handle_mouse(&mut self, mouse: MouseEvent) {
+        if self.menu_view.is_open() {
+            return;
+        }
+
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 if !self.click_atlas_tab(mouse.column, mouse.row) {

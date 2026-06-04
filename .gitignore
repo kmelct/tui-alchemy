@@ -10,3 +10,4 @@ __pycache__/
 /scripts/update-readme-screenshots/target/
 /website/node_modules/
 /website/packages/alchemy-wasm/target/
+/.playwright-mcp/

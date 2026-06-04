@@ -20,6 +20,7 @@
 
 - [What is Alchemy?](#what-is-alchemy)
 - [Quick start](#quick-start)
+- [User guide](#user-guide)
 - [How the screen works](#how-the-screen-works)
 - [How to play](#how-to-play)
 - [Tutorial: make Steam](#tutorial-make-steam)
@@ -89,6 +90,10 @@ cargo run
 
 Press `q` to quit.
 
+## User guide
+
+The player-facing README lives at [`docs/README.md`](docs/README.md). It includes the minimal in-game menu, the controls submenu, reset flow, and screenshot tables for the main play loop and responsive layouts.
+
 ## How the screen works
 
 <!-- readme-screenshots:start -->
@@ -123,6 +128,7 @@ The left rail tracks progress, the center atlas holds discovered ingredients, an
 | `[`, `]` | Move atlas pages |
 | `Home`, `End` | Jump to the first or last visible discovery |
 | `Esc`, `c` | Clear the current selection |
+| `m` | Open the game menu; use `controls` for key help or `reset game` to restart discoveries |
 | `q` | Quit |
 
 ### Mouse controls

@@ -297,6 +297,43 @@ fn header_mentions_game_title_once() {
 }
 
 #[test]
+fn menu_keeps_controls_in_a_minimal_submenu() {
+    let backend = TestBackend::new(100, 28);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = App::new();
+
+    app.handle_event(key(KeyCode::Char('m')));
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let main_menu = buffer_to_text(terminal.backend().buffer()).to_ascii_lowercase();
+    assert!(
+        main_menu.contains("game menu"),
+        "expected the main menu overlay: {main_menu}"
+    );
+    assert!(
+        main_menu.contains("controls"),
+        "expected the main menu to link to controls: {main_menu}"
+    );
+    assert!(
+        !main_menu.contains("arrow keys"),
+        "general controls belong in the controls submenu, not the main menu: {main_menu}"
+    );
+
+    app.handle_event(key(KeyCode::Down));
+    app.handle_event(key(KeyCode::Enter));
+    app.handle_event(key(KeyCode::Char('1')));
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let controls = buffer_to_text(terminal.backend().buffer()).to_ascii_lowercase();
+    assert!(
+        controls.contains("controls") && controls.contains("arrow keys"),
+        "expected the controls submenu to show minimal key help: {controls}"
+    );
+    assert!(
+        !controls.contains("selected air"),
+        "gameplay keys should not leak through while the controls submenu is open: {controls}"
+    );
+}
+
+#[test]
 fn wide_workbench_does_not_become_a_full_height_sidebar() {
     let backend = TestBackend::new(160, 50);
     let mut terminal = Terminal::new(backend).unwrap();

@@ -1,7 +1,7 @@
 #[path = "ui/sprite_strategy.rs"]
 mod sprite_strategy;
 
-use crate::app::App;
+use crate::app::{App, MenuItem, MenuView};
 use crate::effects::ElementStyle;
 use crate::layout::{
     IsoCell, atlas_page_count, atlas_page_size, atlas_panel, atlas_tab_rects, board_inner,
@@ -60,6 +60,9 @@ pub fn render_app(frame: &mut Frame<'_>, app: &App) {
             drag.element_index,
             drag.origin,
         );
+    }
+    if app.menu_view().is_open() {
+        render_menu_overlay(frame, area, app);
     }
 }
 
@@ -1187,6 +1190,114 @@ fn slot_bed_for_element(name: &str, seed: usize, is_output: bool, is_birth: bool
             _ => Color::Rgb(68, 52, 48),
         }
     }
+}
+
+fn render_menu_overlay(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let title = match app.menu_view() {
+        MenuView::Closed => return,
+        MenuView::Main => "game menu",
+        MenuView::Controls => "controls",
+        MenuView::ResetConfirm => "reset game",
+    };
+    let lines = menu_overlay_lines(app);
+    let width = area.width.min(46).max(area.width.min(24));
+    let height = (lines.len() as u16)
+        .saturating_add(2)
+        .min(area.height)
+        .max(3);
+    let x = area.x + area.width.saturating_sub(width) / 2;
+    let y = area.y + area.height.saturating_sub(height) / 2;
+    let panel = Rect::new(x, y, width, height);
+
+    render_panel_frame(frame, panel, title, palette_color(Ink::SELECTED));
+    if panel.width <= 4 || panel.height <= 2 {
+        return;
+    }
+
+    let body = Rect::new(
+        panel.x + 2,
+        panel.y + 1,
+        panel.width.saturating_sub(4),
+        panel.height.saturating_sub(2),
+    );
+    let paragraph = Paragraph::new(Text::from(lines))
+        .style(
+            Style::default()
+                .fg(palette_color(Ink::HINT))
+                .bg(Surfaces::PANEL_BG),
+        )
+        .alignment(ratatui::layout::Alignment::Center)
+        .wrap(Wrap { trim: false });
+    frame.render_widget(paragraph, body);
+}
+
+fn menu_overlay_lines(app: &App) -> Vec<Line<'static>> {
+    match app.menu_view() {
+        MenuView::Closed => Vec::new(),
+        MenuView::Main => main_menu_lines(app.menu_item()),
+        MenuView::Controls => controls_menu_lines(),
+        MenuView::ResetConfirm => reset_menu_lines(),
+    }
+}
+
+fn main_menu_lines(selected: MenuItem) -> Vec<Line<'static>> {
+    let hint = Style::default()
+        .fg(palette_color(Ink::HINT))
+        .bg(Surfaces::PANEL_BG);
+    let items = [MenuItem::Resume, MenuItem::Controls, MenuItem::ResetGame];
+    let mut lines = Vec::with_capacity(items.len() + 2);
+    lines.push(Line::from(Span::styled("enter select · esc close", hint)));
+    lines.push(Line::from(""));
+    for item in items {
+        lines.push(menu_item_line(item, item == selected));
+    }
+    lines
+}
+
+fn controls_menu_lines() -> Vec<Line<'static>> {
+    vec![
+        menu_hint_line("arrow keys / hjkl move"),
+        menu_hint_line("enter select"),
+        menu_hint_line("1-9 pick visible"),
+        menu_hint_line("drag cards to slots"),
+        menu_hint_line("m menu · esc back"),
+    ]
+}
+
+fn reset_menu_lines() -> Vec<Line<'static>> {
+    vec![
+        menu_hint_line("reset discoveries to starters?"),
+        menu_hint_line("enter reset"),
+        menu_hint_line("esc back"),
+    ]
+}
+
+fn menu_item_line(item: MenuItem, selected: bool) -> Line<'static> {
+    let style = if selected {
+        Style::default()
+            .fg(palette_color(Ink::SELECTED))
+            .bg(Surfaces::PANEL_BG)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+            .fg(palette_color(Ink::HINT))
+            .bg(Surfaces::PANEL_BG)
+    };
+    let pointer = if selected { "›" } else { " " };
+    Line::from(vec![
+        Span::styled(pointer, style),
+        Span::styled(" ", style),
+        Span::styled(item.label(), style),
+    ])
+}
+
+fn menu_hint_line(text: &'static str) -> Line<'static> {
+    Line::from(Span::styled(
+        text,
+        Style::default()
+            .fg(palette_color(Ink::HINT))
+            .bg(Surfaces::PANEL_BG),
+    ))
 }
 
 fn render_drag_overlay(
