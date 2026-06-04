@@ -52,6 +52,8 @@ assert(html.includes('AlchemyTerminalWasm'), 'page must expose the wasm demo con
 assert(html.includes('/assets/sprites/'), 'recipe formula must use real element sprites');
 assert(html.includes('/assets/gen/retro-computer.png'), 'live demo must be housed in the retro computer artwork');
 assert(html.includes('/assets/gen/wax-seal.png'), "parchment card must carry the maker's wax seal");
+assert(html.includes('class="rig-machine"') && html.includes('width="600"') && html.includes('height="600"'), 'retro computer image must reserve its square layout before loading');
+
 
 // ---- the removed AI-slop must stay gone (regression guard) ----
 assert(!html.toLowerCase().includes('dash://'), 'the fake dash:// protocol must not return');
@@ -64,20 +66,35 @@ assert(!html.includes('data-particle-field'), 'the background particle canvas mu
 // ---- the scene + restraint (CSS) ----
 assert(css.includes('workshop-backdrop'), 'the scene must use the generated workshop backdrop');
 assert(css.includes('parchment-sheet'), 'the copy must sit on a parchment surface');
+assert(css.includes('aspect-ratio:1 / 1'), 'retro computer rig must reserve square space before its image finishes loading');
 assert(css.includes('recipeCycle'), 'the recipe scroll must cross-fade real recipes');
 assert(css.includes('kbdpress'), 'the C64 keyboard must flash when keys are pressed');
 assert(css.includes('prefers-reduced-motion'), 'motion must respect reduced-motion users');
 assert(!css.includes('data-relic') && !css.includes('data-particle-field'), 'the old effect chrome must not return');
+const screenOverlayRule = css.match(/#terminalShell\{position:absolute;left:([0-9.]+)%;top:([0-9.]+)%;width:([0-9.]+)%;height:([0-9.]+)%;\}/);
+assert(screenOverlayRule, 'terminal overlay must be explicitly calibrated to the CRT glass');
+const [, shellLeft, shellTop, shellWidth, shellHeight] = screenOverlayRule.map(Number);
+assert(shellLeft >= 25 && shellLeft <= 27, `terminal overlay left edge must align to glass, got ${shellLeft}%`);
+assert(shellTop >= 13 && shellTop <= 15, `terminal overlay top edge must align to glass, got ${shellTop}%`);
+assert(shellWidth >= 44 && shellWidth <= 47, `terminal overlay width must align to glass, got ${shellWidth}%`);
+assert(shellHeight >= 37 && shellHeight <= 39, `terminal overlay height must align to glass, got ${shellHeight}%`);
+
 
 // ---- honest boot + live demo input wiring (xterm bridge) ----
 assert(terminalJs.includes('loading alchemy.wasm'), 'terminal boot must show the honest wasm load line');
 assert(!terminalJs.includes('MOUNTING RATATUI WORKSHOP') && !terminalJs.includes('POWER-ON SELF TEST'), 'terminal boot must not keep the fake BIOS sequence');
 assert(terminalJs.includes('waitForEl'), 'the bridge must wait for the terminal mount point');
 assert(terminalJs.includes('AlchemyFX'), 'the bridge must trigger retro FX (sound + keyboard flash) on key/boot');
+assert(terminalJs.includes('waitForVisibleBox'), 'the bridge must wait for the screen box, not just the DOM node');
+assert(terminalJs.includes('ResizeObserver'), 'live demo terminal must refit when the machine artwork changes size');
 assert(terminalJs.includes('mouse_down') && terminalJs.includes('mouse_drag') && terminalJs.includes('mouse_up'), 'web terminal must forward pointer events into the wasm app');
 assert(terminalJs.includes('key_char') && terminalJs.includes('key_enter'), 'web terminal must forward keys into the wasm app');
 assert(terminalJs.includes('\\x1b[?1049h'), 'web terminal must switch xterm into the alternate screen');
 assert(terminalJs.includes('scrollback: 0'), 'live demo terminal must disable scrollback');
+assert(terminalJs.includes('fitReadableTerminal'), 'live demo terminal must choose a readable font before fitting');
+assert(terminalJs.includes('waitForFonts'), 'live demo terminal must refit after web fonts are ready');
+assert(terminalJs.includes('writePending'), 'live demo terminal must not queue unlimited frames into xterm');
+assert(!terminalJs.includes("setStatus(shell, 'live');\n  await new Promise"), 'terminal status must not claim live before the app is active');
 assert(!terminalJs.includes('cursorBlink: true'), 'web terminal must not use a blinking cursor effect');
 assert(!terminalCss.includes('DASH://'), 'the live screen must not invent a dash:// link title');
 assert(terminalCss.includes('.terminal-window'), 'the live screen must render the terminal window surface');

@@ -278,11 +278,11 @@
 
   /* ---------- The computer rig ---------- */
   .rig{position:relative;justify-self:center;align-self:center;
-    width:100%;max-width:min(48vw,720px);}
+    width:100%;max-width:min(52vw,820px);aspect-ratio:1 / 1;}
   .rig-machine{display:block;width:100%;height:auto;
     filter:drop-shadow(0 22px 30px rgba(0,0,0,.6));}
   /* live screen overlay — calibrated to the CRT glass of the machine art */
-  #terminalShell{position:absolute;left:20.6%;top:9.4%;width:58%;height:46.4%;}
+  #terminalShell{position:absolute;left:25.8%;top:13.7%;width:45.2%;height:38%;}
   /* keyboard "alive" flash — lights the C64 keys when you type in the demo */
   .rig-kbd{position:absolute;left:10%;top:58%;width:80%;height:31%;z-index:1;
     pointer-events:none;opacity:0;border-radius:12px;mix-blend-mode:screen;

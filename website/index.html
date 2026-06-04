@@ -25,8 +25,8 @@
 <meta name="twitter:title" content="Alchemy TUI — terminal crafting game">
 <meta name="twitter:description" content="A Rust terminal alchemy game with pixel-art sprites and a 755-element recipe book. Play it live in your browser.">
 <meta name="twitter:image" content="https://tui-alchemy.sh/assets/social-preview.png">
-<link rel="stylesheet" href="/assets/main.css?v=0.2.0-static1">
-<link rel="stylesheet" href="/assets/terminal.css?v=0.2.0-static1">
+<link rel="stylesheet" href="/assets/main.css?v=0.2.0-static3">
+<link rel="stylesheet" href="/assets/terminal.css?v=0.2.0-static3">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -101,7 +101,7 @@
       </section>
 
       <section class="rig">
-        <img class="rig-machine" src="/assets/gen/retro-computer.png" alt="A retro Commodore-style computer running the Alchemy TUI demo">
+        <img class="rig-machine" src="/assets/gen/retro-computer.png" width="600" height="600" alt="A retro Commodore-style computer running the Alchemy TUI demo">
         <div class="rig-kbd" aria-hidden="true"></div>
         <section class="terminal-shell" id="terminalShell" data-active-terminal data-pc-autostart aria-label="Interactive Alchemy TUI web terminal">
           <div class="crt-status"><span data-terminal-status>booting</span></div>
@@ -128,7 +128,7 @@
   </div>
 
   <script>
-    window.AlchemyTerminalWasm = { wasmUrl: "/assets/alchemy_terminal_wasm.wasm?v=0.2.0-static2" };
+    window.AlchemyTerminalWasm = { wasmUrl: "/assets/alchemy_terminal_wasm.wasm?v=0.2.0-static3" };
 
     // Retro FX: synthesised key-click / boot sounds (Web Audio, no files) + a flash over the
     // C64 keyboard, so the board feels alive when you type in the demo. Sound is only ever
@@ -185,7 +185,7 @@
       return { key, stamp, boot, toggle, unlock };
     })();
   </script>
-  <script type="module" src="/assets/terminal.js?v=0.2.0-static2"></script>
+  <script type="module" src="/assets/terminal.js?v=0.2.0-static3"></script>
   <script>
     // Click-to-copy the install command, with a non-secure-context fallback.
     (function () {

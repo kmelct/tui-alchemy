@@ -3,6 +3,12 @@ import { FitAddon } from '@xterm/addon-fit';
 
 let decoder = new TextDecoder();
 const TICK_MS = 120;
+const MIN_FONT_SIZE = 8;
+const MAX_FONT_SIZE = 16;
+const TARGET_COLS = 64;
+const TARGET_ROWS = 21;
+const VT323_CELL_ASPECT = 0.4;
+
 
 function readWasmString(instance, ptrName, lenName) {
   const { memory } = instance.exports;
@@ -41,16 +47,78 @@ async function playBootSequence(intro, shell, instancePromise) {
   setStatus(shell, 'booting');
   await instancePromise;
   if (hint) hint.textContent = 'ready';
-  setStatus(shell, 'live');
+  setStatus(shell, 'booting');
   await new Promise((resolve) => window.setTimeout(resolve, 180));
 }
 
-function renderFrame(term, instance) {
-  term.write(readScreen(instance));
+async function waitForFonts(timeoutMs = 1200) {
+  if (!document.fonts?.ready) return;
+  await Promise.race([
+    document.fonts.ready,
+    new Promise((resolve) => window.setTimeout(resolve, timeoutMs)),
+  ]);
 }
 
-function syncSize(fit, term, instance) {
+function waitForVisibleBox(element, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const started = performance.now();
+    const check = () => {
+      const { width, height } = element.getBoundingClientRect();
+      if (width >= 120 && height >= 90) {
+        resolve();
+        return;
+      }
+      if (performance.now() - started > timeoutMs) {
+        reject(new Error('timeout waiting for terminal screen box'));
+        return;
+      }
+      window.requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+
+function readableFontSize(mount) {
+  const { width, height } = mount.getBoundingClientRect();
+  const byCols = width / (TARGET_COLS * VT323_CELL_ASPECT);
+  const byRows = height / TARGET_ROWS;
+  return Math.floor(Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, byCols, byRows)));
+}
+
+function fitReadableTerminal(fit, term, mount) {
+  const fontSize = readableFontSize(mount);
+  if (term.options.fontSize !== fontSize) {
+    term.options.fontSize = fontSize;
+  }
   fit.fit();
+}
+
+let writePending = false;
+let queuedFrame = null;
+
+function writeFrame(term, frame) {
+  writePending = true;
+  term.write(frame, () => {
+    writePending = false;
+    if (queuedFrame !== null) {
+      const nextFrame = queuedFrame;
+      queuedFrame = null;
+      writeFrame(term, nextFrame);
+    }
+  });
+}
+
+function renderFrame(term, instance) {
+  const frame = readScreen(instance);
+  if (writePending) {
+    queuedFrame = frame;
+    return;
+  }
+  writeFrame(term, frame);
+}
+
+function syncSize(fit, term, instance, mount) {
+  fitReadableTerminal(fit, term, mount);
   instance.exports.resize(term.cols, term.rows);
   renderFrame(term, instance);
 }
@@ -240,13 +308,15 @@ function waitForEl(id, timeoutMs = 10000) {
 async function bootTerminal() {
   const config = window.AlchemyTerminalWasm;
   if (!config) return;
-  // The mount point is rendered by the Dioxus app, so wait for it to appear
-  // (handles both pre-rendered markup and client-side hydration).
+  // The mount point exists before the computer artwork has necessarily loaded,
+  // so wait for both the nodes and a real screen-sized box before fitting xterm.
   let mount;
   let shell;
   try {
     mount = await waitForEl('alchemyTerminal');
     shell = await waitForEl('terminalShell');
+    await waitForVisibleBox(shell);
+    await waitForVisibleBox(mount);
   } catch (_) {
     return;
   }
@@ -292,25 +362,37 @@ async function bootTerminal() {
   const fit = new FitAddon();
   term.loadAddon(fit);
   term.open(mount);
-  fit.fit();
 
-  const instancePromise = instantiateWasm(config.wasmUrl);
+  const instancePromise = instantiateWasm(config.wasmUrl).catch((error) => error);
+  await waitForFonts();
+  fitReadableTerminal(fit, term, mount);
+  let instance;
   try {
     await playBootSequence(intro, shell, instancePromise);
+    instance = await instancePromise;
+    if (instance instanceof Error) throw instance;
   } catch (error) {
     shell.dataset.terminalState = 'error';
     setStatus(shell, 'boot fault');
     term.write(`\r\n\x1b[31m${error.message}\x1b[0m\r\n`);
     return;
   }
-
-  const instance = await instancePromise;
   term.write('\x1b[?1049h\x1b[?25l');
-  syncSize(fit, term, instance);
+  syncSize(fit, term, instance, mount);
   bindKeyboard(instance, term);
   bindPointer(instance, term, mount);
 
-  const resize = () => syncSize(fit, term, instance);
+  let resizeFrame = 0;
+  const resize = () => {
+    if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+    resizeFrame = window.requestAnimationFrame(() => {
+      resizeFrame = 0;
+      syncSize(fit, term, instance, mount);
+    });
+  };
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(shell);
+  resizeObserver.observe(mount);
   window.addEventListener('resize', resize, { passive: true });
 
   window.setInterval(() => {
