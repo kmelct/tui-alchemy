@@ -25,8 +25,8 @@
 <meta name="twitter:title" content="Alchemy TUI — terminal crafting game">
 <meta name="twitter:description" content="A Rust terminal alchemy game with pixel-art sprites and a 755-element recipe book. Play it live in your browser.">
 <meta name="twitter:image" content="https://tui-alchemy.sh/assets/social-preview.png">
-<link rel="stylesheet" href="/assets/main.css?v=0.2.0-static3">
-<link rel="stylesheet" href="/assets/terminal.css?v=0.2.0-static3">
+<link rel="stylesheet" href="/assets/main.css?v=0.2.0-static4">
+<link rel="stylesheet" href="/assets/terminal.css?v=0.2.0-static4">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -65,16 +65,10 @@
 
     <main>
       <section class="page">
-        <!-- real two-element recipes (data/little_alchemy.json) — cross-fade via CSS, no JS -->
-        <p class="formula" aria-label="Combine two elements to discover 755 more">
-          <span class="recipe">
-            <img class="rune" src="/assets/sprites/water.png" alt="Water"><span class="op">+</span><img class="rune" src="/assets/sprites/fire.png" alt="Fire"><span class="arrow">→</span><img class="rune r" src="/assets/sprites/steam.png" alt="Steam"><span class="rname">steam</span>
-          </span>
+        <!-- stable real recipe preview: no blinking carousel or framed artifact -->
+        <p class="formula" aria-label="Combine earth and fire to make lava">
           <span class="recipe">
             <img class="rune" src="/assets/sprites/earth.png" alt="Earth"><span class="op">+</span><img class="rune" src="/assets/sprites/fire.png" alt="Fire"><span class="arrow">→</span><img class="rune r" src="/assets/sprites/lava.png" alt="Lava"><span class="rname">lava</span>
-          </span>
-          <span class="recipe">
-            <img class="rune" src="/assets/sprites/water.png" alt="Water"><span class="op">+</span><img class="rune" src="/assets/sprites/air.png" alt="Air"><span class="arrow">→</span><img class="rune r" src="/assets/sprites/rain.png" alt="Rain"><span class="rname">rain</span>
           </span>
         </p>
 
@@ -128,7 +122,7 @@
   </div>
 
   <script>
-    window.AlchemyTerminalWasm = { wasmUrl: "/assets/alchemy_terminal_wasm.wasm?v=0.2.0-static3" };
+    window.AlchemyTerminalWasm = { wasmUrl: "/assets/alchemy_terminal_wasm.wasm?v=0.2.0-static4" };
 
     // Retro FX: synthesised key-click / boot sounds (Web Audio, no files) + a flash over the
     // C64 keyboard, so the board feels alive when you type in the demo. Sound is only ever
@@ -185,7 +179,7 @@
       return { key, stamp, boot, toggle, unlock };
     })();
   </script>
-  <script type="module" src="/assets/terminal.js?v=0.2.0-static3"></script>
+  <script type="module" src="/assets/terminal.js?v=0.2.0-static4"></script>
   <script>
     // Click-to-copy the install command, with a non-secure-context fallback.
     (function () {

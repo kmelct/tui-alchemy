@@ -53,6 +53,9 @@ assert(html.includes('/assets/sprites/'), 'recipe formula must use real element 
 assert(html.includes('/assets/gen/retro-computer.png'), 'live demo must be housed in the retro computer artwork');
 assert(html.includes('/assets/gen/wax-seal.png'), "parchment card must carry the maker's wax seal");
 assert(html.includes('class="rig-machine"') && html.includes('width="600"') && html.includes('height="600"'), 'retro computer image must reserve its square layout before loading');
+const heroRecipeCount = (html.match(/class="recipe"/g) || []).length;
+assert(heroRecipeCount === 1, `hero formula must be one stable recipe, not a blinking carousel (${heroRecipeCount})`);
+
 
 
 // ---- the removed AI-slop must stay gone (regression guard) ----
@@ -67,7 +70,9 @@ assert(!html.includes('data-particle-field'), 'the background particle canvas mu
 assert(css.includes('workshop-backdrop'), 'the scene must use the generated workshop backdrop');
 assert(css.includes('parchment-sheet'), 'the copy must sit on a parchment surface');
 assert(css.includes('aspect-ratio:1 / 1'), 'retro computer rig must reserve square space before its image finishes loading');
-assert(css.includes('recipeCycle'), 'the recipe scroll must cross-fade real recipes');
+assert(!css.includes('recipeCycle'), 'hero recipe must not randomly blink or cross-fade');
+assert(!css.includes('animation:recipeCycle'), 'hero recipe must not attach a blinking recipe animation');
+assert(!css.includes('border:1px solid rgba(92,66,38,.34)'), 'hero recipe must not draw a white square around the item row');
 assert(css.includes('kbdpress'), 'the C64 keyboard must flash when keys are pressed');
 assert(css.includes('prefers-reduced-motion'), 'motion must respect reduced-motion users');
 assert(!css.includes('data-relic') && !css.includes('data-particle-field'), 'the old effect chrome must not return');
@@ -99,6 +104,8 @@ assert(!terminalJs.includes('cursorBlink: true'), 'web terminal must not use a b
 assert(!terminalCss.includes('DASH://'), 'the live screen must not invent a dash:// link title');
 assert(terminalCss.includes('.terminal-window'), 'the live screen must render the terminal window surface');
 assert(terminalCss.includes('user-select: none'), 'live demo terminal must disable text selection so drag-and-drop works');
+assert(terminalCss.includes('.xterm-cursor') && terminalCss.includes('display: none !important'), 'live demo must hide xterm cursor blocks');
+assert(terminalCss.includes('caret-color: transparent'), 'live demo input textarea must not show a stray caret square');
 
 // ---- build pipeline (static: copy + wasm + esbuild, no framework) ----
 assert(!buildScript.includes('dx build') && !buildScript.includes('dioxus'), 'build script must be a plain static build, not a framework build');

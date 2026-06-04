@@ -204,22 +204,12 @@
   .page::before{top:-2px;left:-2px;box-shadow:calc(100% + 4px) 0 0 var(--bronze);}
   .page::after{bottom:-2px;left:-2px;box-shadow:calc(100% + 4px) 0 0 var(--bronze);}
 
-  /* recipe scroll — three REAL two-element recipes that cross-fade (CSS only, no timer).
-     Replaces the fake "dash://" kicker block. */
-  .formula{position:relative;align-self:flex-start;min-width:210px;
-    height:clamp(42px,5.4vw,58px);padding:6px 12px;
-    background:rgba(66,53,59,.10);border:1px solid rgba(92,66,38,.34);}
-  .formula .recipe{position:absolute;left:12px;top:50%;transform:translateY(-50%);
-    display:flex;align-items:center;gap:clamp(5px,.7vw,10px);
-    opacity:0;animation:recipeCycle 12.6s ease-in-out infinite;}
-  .formula .recipe:nth-child(2){animation-delay:4.2s;}
-  .formula .recipe:nth-child(3){animation-delay:8.4s;}
-  /* visible windows overlap so the box cross-fades and is never empty */
-  @keyframes recipeCycle{0%{opacity:0;transform:translateY(-50%) translateX(4px);}
-    5%,33%{opacity:1;transform:translateY(-50%) translateX(0);}
-    38%,100%{opacity:0;transform:translateY(-50%);}}
+  /* stable real recipe preview — no blink/cross-fade and no framed square */
+  .formula{align-self:flex-start;min-width:210px;
+    min-height:clamp(38px,5vw,52px);display:flex;align-items:center;}
+  .formula .recipe{display:flex;align-items:center;gap:clamp(5px,.7vw,10px);}
   .formula .rune{width:clamp(26px,3vw,36px);height:clamp(26px,3vw,36px);
-    image-rendering:pixelated;animation:bob 3.6s ease-in-out infinite;}
+    image-rendering:pixelated;}
   .formula .rune.r{filter:drop-shadow(0 0 7px rgba(214,201,122,.55));}
   .formula .op,.formula .arrow{font-family:var(--font-term);
     font-size:clamp(17px,2vw,24px);color:var(--bronze-deep);line-height:1;}
@@ -227,7 +217,7 @@
   .formula .rname{font-family:var(--font-micro);font-size:8px;
     color:var(--paper-ink-2);letter-spacing:.06em;margin-left:2px;
     align-self:center;text-transform:lowercase;}
-  @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-3px);}}
+
 
   h1{font-family:var(--font-pixel);font-weight:700;
     font-size:clamp(40px,7.4vmin,84px);line-height:.9;letter-spacing:.005em;
@@ -345,7 +335,5 @@
     .formula,.page-foot .meta{display:none;}
   }
   @media (prefers-reduced-motion:reduce){
-    .formula .rune{animation:none;}
-    .formula .recipe{animation:none;opacity:0;transform:translateY(-50%);}
-    .formula .recipe:nth-child(1){opacity:1;}
+    .rig-kbd.lit{animation:none;}
   }

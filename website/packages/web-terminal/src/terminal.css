@@ -80,6 +80,16 @@
   background: transparent !important;
 }
 
+#alchemyTerminal .xterm-cursor {
+  display: none !important;
+  animation: none !important;
+}
+
+#alchemyTerminal .xterm-helper-textarea {
+  caret-color: transparent;
+}
+
+
 /* honest boot overlay — one real load line, no fake BIOS */
 .terminal-intro {
   position: absolute;
